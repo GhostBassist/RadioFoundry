@@ -1197,13 +1197,17 @@ static bool smsFormatBuilt(uint8_t format)
 
 bool dmrDataServiceSendSMSFormat(bool group, uint32_t dst, const char *text, bool ackRequested, uint8_t format)
 {
-	bool useUdt = format == DMR_SMS_FORMAT_DEFAULT && channel.trunked;
+	bool useUdt = format == DMR_SMS_FORMAT_T3_UDT || (format == DMR_SMS_FORMAT_DEFAULT && channel.trunked);
+	if (useUdt && !channel.trunked)
+	{
+		return false;
+	}
 	if (format == DMR_SMS_FORMAT_DEFAULT)
 	{
 		// A setting this build can't send (TMS stored by a build with it): the standard default instead
 		format = smsFormatBuilt(settings.smsFormat) ? settings.smsFormat : DMR_SMS_FORMAT_ETSI_IP;
 	}
-	if (!smsFormatBuilt(format))
+	if (!useUdt && !smsFormatBuilt(format))
 	{
 		return false;
 	}
@@ -2599,7 +2603,7 @@ void dmrDataServiceInboxAdd(uint32_t src, uint32_t dst, bool group, const char *
 {
 	if (CONFIG_DMR_SMS && (text[0] != '\0'))
 	{
-		inboxStore(src, dst, group, 0, DMR_SMS_FORMAT_ETSI, text);
+		inboxStore(src, dst, group, 0, DMR_SMS_FORMAT_T3_UDT, text);
 	}
 }
 
@@ -2977,7 +2981,7 @@ bool sms_send(uint32_t dst, bool group, const char *text, bool ack_requested, dm
 	bool ok = false;
 
 	if (!CONFIG_DMR_SMS || (text == NULL) || (text[0] == '\0') || (dst == 0) ||
-			(!smsFormatBuilt(format) && (format != DMR_SMS_FORMAT_DEFAULT)))
+			(!smsFormatBuilt(format) && format != DMR_SMS_FORMAT_DEFAULT && format != DMR_SMS_FORMAT_T3_UDT))
 	{
 		return false;
 	}

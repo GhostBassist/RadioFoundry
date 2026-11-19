@@ -8883,7 +8883,8 @@ static void test_t3_sdata(void)
 	CHECK(msgs >= 1);
 	if (msgs >= 1) {
 		const dmrDataMessage_t *m = dmrDataServiceMessage(0);
-		CHECK(m->src == 1000001u && !m->group && strcmp(m->text, "hi there") == 0 && m->unread);
+		CHECK(m->src == 1000001u && !m->group && strcmp(m->text, "hi there") == 0 && m->unread &&
+		      m->format == DMR_SMS_FORMAT_T3_UDT);
 	}
 	while (sms_inbox_count() > 0 && sms_inbox_delete(0)) {
 	}
@@ -8977,7 +8978,8 @@ static void test_t3_pdata(void)
 	run(500);
 	CHECK(sms_inbox_count() == inbox + 1);
 	dmrDataMessage_t m;
-	CHECK(sms_inbox_get(0, &m) && m.src == 1000001u && strcmp(m.text, "hi radio") == 0);
+	CHECK(sms_inbox_get(0, &m) && m.src == 1000001u && strcmp(m.text, "hi radio") == 0 &&
+	      m.format == DMR_SMS_FORMAT_ETSI_IP);
 	CHECK(sms_inbox_delete(0));	// the inbox as the later tests expect it
 	req(RREQ_T3, RADIO_T3_STOP);
 	run(100);
