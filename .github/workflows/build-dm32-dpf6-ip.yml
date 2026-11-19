@@ -13,18 +13,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 700d9f3b6bf50545a66e83fd6ca10c708edda778
+          ref: de2b5410ecdc8258975207f8bea6c8806c030920
           persist-credentials: false
           submodules: recursive
       - name: Build and identify firmware
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 700d9f3b6bf50545a66e83fd6ca10c708edda778
+          test "$(git rev-parse HEAD)" = de2b5410ecdc8258975207f8bea6c8806c030920
           tools/docker/csky-toolchain/run.sh make -j2 BOARD=dm32
           tools/docker/csky-toolchain/run.sh make BOARD=dm32 size
           sha256sum build/dm32/rfoundry_dm32.bin
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: dm32-dpf6-ip-700d9f3
+          name: dm32-dpf6-ip-de2b5410
           path: build/dm32/rfoundry_dm32.bin
           if-no-files-found: error
