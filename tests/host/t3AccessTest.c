@@ -3113,6 +3113,11 @@ static void test_hytera_data_terminal_check(void)
 	CHECK(nsent == 1 && sent_act[0].slot == 1 && sent[0].op == T3_OP_C_ACKU &&
 	      sent[0].u.ack.reason == T3_RC_MS_ACCEPTED && sent[0].u.ack.dst == T3_HYTERA_DT_CHECK_ID &&
 	      sent[0].u.ack.src == OWN, "answer the Hytera data terminal check on its control slot");
+	CHECK(sent_act[0].burst[3] == 0x89u, "set the reserved bit after MS_Accepted");
+	t3_csbk_t normal = ahoy(T3_SK_REGISTRATION, false, OWN, T3_ID_TSI);
+	rx(&ms, 1, &normal);
+	frames(&ms, 1);
+	CHECK(nsent == 2 && sent_act[1].burst[3] == 0x88u, "leave the reserved bit clear on a standard reply");
 }
 
 int main(void)
