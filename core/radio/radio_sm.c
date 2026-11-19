@@ -2420,13 +2420,13 @@ static bool data_next(dmr_tx_burst_t *out, void *ctx)
 	out->len = d->length <= DMR_PAYLOAD_MAX ? d->length : DMR_PAYLOAD_MAX;
 	memcpy(out->payload, d->payload, out->len);
 #if CONFIG_DMR_TRUNK_TX
-	// Hytera's expanded packet-data channel uses DPF 6 for the confirmed header.
+	// Hytera's expanded packet-data channel uses DPF 7 for the confirmed header.
 	// The HRC7000 generates the header CRC with the standard 0xCCCC mask.
 	if (t3m.state == T3_FOLLOW && t3m.call.data &&
 	    out->kind == DMR_BURST_DATA_HEADER && out->len == 12 &&
 	    (out->payload[0] & 0x0Fu) == DMR_DPF_CONFIRMED &&
 	    dmrDataServiceTxIsConfirmedSms()) {
-		out->payload[0] = (out->payload[0] & 0xF0u) | 0x06u;
+		out->payload[0] = (out->payload[0] & 0xF0u) | 0x07u;
 	}
 #endif
 	return true;
