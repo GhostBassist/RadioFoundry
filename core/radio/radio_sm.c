@@ -2424,7 +2424,7 @@ static bool data_next(dmr_tx_burst_t *out, void *ctx)
 	// The HRC7000 generates the header CRC with the standard 0xCCCC mask.
 	if (t3m.state == T3_FOLLOW && t3m.call.data &&
 	    out->kind == DMR_BURST_DATA_HEADER && out->len == 12 &&
-	    !out->host_crc && (out->payload[0] & 0x0Fu) == DMR_DPF_CONFIRMED &&
+	    (out->payload[0] & 0x0Fu) == DMR_DPF_CONFIRMED &&
 	    dmrDataServiceTxIsConfirmedSms()) {
 		out->payload[0] = (out->payload[0] & 0xF0u) | 0x06u;
 	}
