@@ -2903,6 +2903,11 @@ const char *dmrDataServiceTxKindName(uint8_t kind)
 	return (kind < TXK_COUNT) ? txKindNames[kind] : "?";
 }
 
+bool dmrDataServiceTxIsConfirmedSms(void)
+{
+	return txKind == TXK_IP && ipx.sms && ipx.confirmed && ipx.state == IPX_SENDING;
+}
+
 const char *dmrDataServiceTxStartingName(void)
 {
 	return dmrDataServiceTxKindName(txKind);

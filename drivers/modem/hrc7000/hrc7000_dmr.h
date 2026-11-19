@@ -188,6 +188,7 @@ typedef struct {
 	uint8_t tx_wait;
 	uint32_t tx_last_arm;	// tick of the last burst armed
 	bool tx_any;
+	bool tx_pdt_header_crc;
 	bool tx_listen;		// the other slot is received while we send (an SFR's inbound slot)
 	bool listen_voice;	// a voice call was heard on that slot: receive it with the voice-access flag
 	uint32_t tap_sum[2];	// a checksum of each receive tap area at its last read: only a changed one is decoded

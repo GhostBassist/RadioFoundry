@@ -109,6 +109,7 @@ typedef struct {
 	uint8_t kind;		// dmr_burst_kind_t
 	uint8_t voice_index;	// voice: 0..5
 	bool host_crc;		// payload already carries its CRC (CRC_MCU_Control)
+	bool pdt_header_crc;	// experimental PDT mask on this data header only
 	uint8_t sync_override;	// dmr_sync_family_t, DMR_SYNC_NONE = normal MS sync
 	uint8_t len;
 	uint8_t payload[DMR_PAYLOAD_MAX];

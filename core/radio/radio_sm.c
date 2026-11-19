@@ -2415,6 +2415,12 @@ static bool data_next(dmr_tx_burst_t *out, void *ctx)
 	const dmrBurst_t *d = &data_tx.list[data_tx.next++];
 	memset(out, 0, sizeof(*out));
 	out->kind = d->dataType;
+#if CONFIG_DMR_TRUNK_TX
+	// Test the CHU's PDT data-header receive path. Leave the block CRCs and other traffic alone.
+	out->pdt_header_crc = t3m.state == T3_FOLLOW && t3m.call.data &&
+		d->dataType == DMR_BURST_DATA_HEADER && d->length >= 10 &&
+		(d->payload[0] & 0x0Fu) == DMR_DPF_CONFIRMED && dmrDataServiceTxIsConfirmedSms();
+#endif
 	out->host_crc = (d->flags & DMR_BURST_FLAG_MCU_CRC) != 0;	// CRC_MCU_Control (gotcha 5.1)
 	out->sync_override = DMR_SYNC_NONE;
 	out->len = d->length <= DMR_PAYLOAD_MAX ? d->length : DMR_PAYLOAD_MAX;

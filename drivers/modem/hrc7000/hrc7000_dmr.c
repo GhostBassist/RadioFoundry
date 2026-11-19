@@ -353,12 +353,21 @@ static void rf_off(hrc7000_dmr_t *e)
 	}
 }
 
+static void tx_header_crc(hrc7000_dmr_t *e, bool pdt)
+{
+	if (e->tx_pdt_header_crc != pdt) {
+		w(e, C7_DATAH_CRC_MASK, pdt ? 0x785Eu : 0xCCCCu);
+		e->tx_pdt_header_crc = pdt;
+	}
+}
+
 // End of a transmission: RF off, queue emptied, TX_DONE, receiver back (6.3); restart: the full receiver restart
 // even on a direct channel (a stall: it drops a lost interrupt request)
 static void tx_finish(hrc7000_dmr_t *e, bool restart)
 {
 	w(e, C7_LAYER2_TXRX_CTRL, TXRX_NONE);
 	rf_off(e);
+	tx_header_crc(e, false);
 	e->txq_tail = e->txq_head;
 	e->tx_state = TXS_IDLE;
 	e->tx_listen = false;
@@ -402,6 +411,7 @@ static void set_send_sync(hrc7000_dmr_t *e, uint8_t family)
 static void arm(hrc7000_dmr_t *e, const dmr_tx_burst_t *b)
 {
 	uint8_t kind = b->kind;
+	tx_header_crc(e, kind == DMR_BURST_DATA_HEADER && b->pdt_header_crc);
 	set_send_sync(e, b->sync_override != DMR_SYNC_NONE ? b->sync_override : DMR_SYNC_MS);
 	if (kind == DMR_BURST_VOICE) {
 		uint8_t idx = (uint8_t)(b->voice_index % 6u);
@@ -1043,6 +1053,7 @@ void hrc7000_dmr_halt(hrc7000_dmr_t *e)
 	bool was_tx = e->tx_state != TXS_IDLE;
 	w(e, C7_LAYER2_TXRX_CTRL, TXRX_NONE);
 	rf_off(e);
+	tx_header_crc(e, false);
 	e->tx_state = TXS_IDLE;
 	e->tx_listen = false;
 	e->txq_tail = e->txq_head;
