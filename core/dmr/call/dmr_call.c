@@ -1746,12 +1746,13 @@ static void tx_poll(uint32_t now)
 			tx_data_fill(now);
 		break;
 	case TX_DATA_END:
-		if (!before(now, s.deadline))
+		if (!before(now, s.deadline)) {
 #if CONFIG_DEBUGLINK
 			if (!s.data.tag || strcmp(s.data.tag, "t3") != 0)
 				dlog("sms modem TX_DONE timeout");
 #endif
 			data_end(DMR_TX_OK);	// tx_done overdue: the bursts went (data_end aborts the modem)
+		}
 		break;
 	default:
 		break;
