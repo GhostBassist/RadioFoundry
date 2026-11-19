@@ -13,19 +13,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 72651afe059e76ba0274c481d58cd63552370ae7
+          ref: 2da469b2fed5e969a7a0226e1aa36098912370dc
           persist-credentials: false
           submodules: recursive
       - name: Build and identify firmware
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 72651afe059e76ba0274c481d58cd63552370ae7
+          test "$(git rev-parse HEAD)" = 2da469b2fed5e969a7a0226e1aa36098912370dc
           tools/docker/csky-toolchain/run.sh make -j2 BOARD=dm32
           tools/docker/csky-toolchain/run.sh make BOARD=dm32 size
           sha256sum build/dm32/rfoundry_dm32.bin
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: dm32-incoming-display-72651afe
+          name: dm32-incoming-display-2da469b2
           path: build/dm32/rfoundry_dm32.bin
           if-no-files-found: error
       - name: Test and render the incoming call screen
