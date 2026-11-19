@@ -48,6 +48,8 @@
 #define T3_OP_TD_GRANT_MI	56
 #define T3_OP_C_MOVE		57
 
+#define T3_FID_HYTERA_DT_CHECK	0x68u
+#define T3_HYTERA_DT_CHECK_ID	0xFFFD01u
 #define T3_FID_HYTERA		0x08u	// feature ID seen on Hytera absolute packet data grants
 
 // Gateway and special addresses (A.4)

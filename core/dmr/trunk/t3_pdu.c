@@ -98,8 +98,14 @@ bool t3_csbk_parse(const uint8_t pdu[T3_CSBK_BYTES], t3_csbk_t *out)
 	out->op = (uint8_t)get(&r, 6);
 	out->fid = (uint8_t)get(&r, 8);
 	memcpy(out->raw, pdu + 2, sizeof(out->raw));
-	if (out->fid != 0 && !(out->fid == T3_FID_HYTERA && out->op == T3_OP_PD_GRANT && !out->lb &&
-			      pdu[2] == 0xFFu && (pdu[3] >> 4) == 0xFu)) {
+	bool hytera_pd_grant = out->fid == T3_FID_HYTERA && out->op == T3_OP_PD_GRANT && !out->lb &&
+		pdu[2] == 0xFFu && (pdu[3] >> 4) == 0xFu;
+	bool hytera_dt_check = out->fid == T3_FID_HYTERA_DT_CHECK && out->op == T3_OP_C_AHOY &&
+		out->lb && !out->pf && pdu[2] == 0x0Eu && pdu[3] == 0x07u &&
+		pdu[7] == (T3_HYTERA_DT_CHECK_ID >> 16) &&
+		pdu[8] == ((T3_HYTERA_DT_CHECK_ID >> 8) & 0xFFu) &&
+		pdu[9] == (T3_HYTERA_DT_CHECK_ID & 0xFFu);
+	if (out->fid != 0 && !hytera_pd_grant && !hytera_dt_check) {
 		return false;
 	}
 	uint8_t op = out->op;

@@ -1907,6 +1907,13 @@ static void on_tscc(t3_ms_t *ms, uint32_t now, uint8_t slot, uint8_t cc, const t
 		return;
 	}
 	if (p->op == T3_OP_C_AHOY) {
+		if (p->fid == T3_FID_HYTERA_DT_CHECK) {
+			if (ms->state == T3_CAMPED && is_me(ms, p->u.ahoy.dst) && !ms->stunned && may_send(ms)) {
+				ps_wake(ms, now);
+				answer(ms, slot, false, T3_RC_MS_ACCEPTED, p->u.ahoy.src, false);
+			}
+			return;
+		}
 		on_ahoy(ms, now, slot, &p->u.ahoy, false);
 		return;
 	}
@@ -2348,7 +2355,9 @@ void t3_ms_rx(t3_ms_t *ms, uint32_t now, uint8_t slot, uint8_t dt, uint8_t cc, c
 		// Any good CSBK on the call's slot keeps it alive, one with another FID included
 		ms->last_act_ms = now;
 	}
-	if (!known || (p.fid != 0 && dt != T3_DT_MBC_HDR)) {
+	if (!known || (p.fid != 0 && dt != T3_DT_MBC_HDR &&
+		       p.fid != T3_FID_HYTERA_DT_CHECK) ||
+	    (p.fid == T3_FID_HYTERA_DT_CHECK && dt == T3_DT_MBC_HDR)) {
 		return;
 	}
 	if (dt == T3_DT_MBC_HDR) {
