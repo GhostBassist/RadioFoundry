@@ -295,6 +295,8 @@ uint16_t dmrDataCRC9(const uint8_t *data, int length, uint8_t serial);
 // header and the blocks. 0 if it doesn't fit
 int dmrDataBuildConfirmed(uint8_t sap, uint32_t dst, uint32_t src, const uint8_t *pdu, int length, uint8_t blockType,
 						uint8_t ns, bool firstTry, uint64_t blocks, int preambles, dmrBurst_t *out, int maxBursts);
+int dmrDataBuildHyteraConfirmed(uint32_t dst, uint32_t src, const uint8_t *pdu, int length, uint8_t ns,
+							   bool firstTry, uint64_t blocks, int preambles, dmrBurst_t *out, int maxBursts);
 // The number of blocks a confirmed packet of length octets takes (0: more than DMR_CONFIRMED_MAX_BLOCKS)
 int dmrDataConfirmedBlocks(int length, uint8_t blockType);
 #if CONFIG_DMR_TMS	// Motorola TMS format support (docs/spec/dmr-data.md 5.1)

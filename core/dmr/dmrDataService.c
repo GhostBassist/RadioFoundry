@@ -702,8 +702,13 @@ static void ipTransmit(void)
 	if (ipx.confirmed)
 	{
 		// One burst kept for the terminator
-		count = dmrDataBuildConfirmed(ipx.sap, linkDst, channel.ownId, pdu, n, confirmedRate, ipx.ns, ipx.firstTry,
-										(ipx.blocks != 0) ? ipx.blocks : ~0ULL, ipCnfPreambles(), txBursts, DMR_DATA_MAX_BURSTS - 1);
+		uint64_t blocks = ipx.blocks != 0 ? ipx.blocks : ~0ULL;
+		int preambles = ipCnfPreambles();
+		count = hyteraV2 ?
+				dmrDataBuildHyteraConfirmed(linkDst, channel.ownId, pdu, n, ipx.ns, ipx.firstTry, blocks, preambles,
+											txBursts, DMR_DATA_MAX_BURSTS - 1) :
+				dmrDataBuildConfirmed(ipx.sap, linkDst, channel.ownId, pdu, n, confirmedRate, ipx.ns, ipx.firstTry, blocks,
+									  preambles, txBursts, DMR_DATA_MAX_BURSTS - 1);
 		if ((count == 0) && (ipx.tries == 0))
 		{
 			if (hyteraV2)

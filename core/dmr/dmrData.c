@@ -924,8 +924,8 @@ uint16_t dmrDataCRC9(const uint8_t *data, int length, uint8_t serial)
 	return crc ^ 0x1FF;
 }
 
-int dmrDataBuildConfirmed(uint8_t sap, uint32_t dst, uint32_t src, const uint8_t *pdu, int length, uint8_t blockType,
-						uint8_t ns, bool firstTry, uint64_t blocks, int preambles, dmrBurst_t *out, int maxBursts)
+static int buildConfirmed(uint8_t sap, uint32_t dst, uint32_t src, const uint8_t *pdu, int length, uint8_t blockType,
+						uint8_t ns, bool firstTry, uint64_t blocks, int preambles, dmrBurst_t *out, int maxBursts, bool hytera)
 {
 	int blockLen = dmrDataBlockLength(blockType);
 	int dataLen = blockLen - 2;
@@ -946,7 +946,7 @@ int dmrDataBuildConfirmed(uint8_t sap, uint32_t dst, uint32_t src, const uint8_t
 	}
 
 	int padOctets = (total * dataLen) - 4 - length;
-	int extra = dmrDataPrivacyBursts();
+	int extra = hytera ? 1 : dmrDataPrivacyBursts();
 	int bursts = preambles + 1 + extra + count;
 	uint8_t buf[DMR_BURST_PAYLOAD_MAX];
 
@@ -978,7 +978,18 @@ int dmrDataBuildConfirmed(uint8_t sap, uint32_t dst, uint32_t src, const uint8_t
 	setBurst(out++, DMR_TYPE_DATA_HEADER, buf, 12);
 
 	memmove(txPacket, pdu, length);
-	out += txPrivacy(sap, out, txPacket, length);// the CRC-32 and CRC-9s below are over the encrypted octets
+	if (hytera)
+	{
+		// Captured dedicated uplink: DPF 15, SAP 9, Hytera FID and eight zero octets.
+		static const uint8_t header[10] = {0x9F, 0x68};
+		memcpy(buf, header, sizeof(header));
+		addCRC16(buf, 0xCC);
+		setBurst(out++, DMR_TYPE_DATA_HEADER, buf, 12);
+	}
+	else
+	{
+		out += txPrivacy(sap, out, txPacket, length);// the CRCs are over the encrypted octets
+	}
 	memset(&txPacket[length], 0, padOctets);
 	uint32_t crc = dmrDataCRC32(txPacket, length + padOctets);
 	uint8_t *crcPos = &txPacket[length + padOctets];
@@ -1004,6 +1015,19 @@ int dmrDataBuildConfirmed(uint8_t sap, uint32_t dst, uint32_t src, const uint8_t
 	}
 
 	return bursts;
+}
+
+int dmrDataBuildConfirmed(uint8_t sap, uint32_t dst, uint32_t src, const uint8_t *pdu, int length, uint8_t blockType,
+						uint8_t ns, bool firstTry, uint64_t blocks, int preambles, dmrBurst_t *out, int maxBursts)
+{
+	return buildConfirmed(sap, dst, src, pdu, length, blockType, ns, firstTry, blocks, preambles, out, maxBursts, false);
+}
+
+int dmrDataBuildHyteraConfirmed(uint32_t dst, uint32_t src, const uint8_t *pdu, int length, uint8_t ns,
+							   bool firstTry, uint64_t blocks, int preambles, dmrBurst_t *out, int maxBursts)
+{
+	return buildConfirmed(DMR_SAP_PROPRIETARY, dst, src, pdu, length, DMR_TYPE_RATE_1_2, ns, firstTry, blocks,
+						  preambles, out, maxBursts, true);
 }
 
 #if CONFIG_DMR_TMS
