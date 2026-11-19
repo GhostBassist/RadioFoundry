@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The RadioFoundry Authors
+name: Build DM-32UV incoming call display
+on:
+  push:
+    branches: [build/dm32-incoming-display]
+permissions:
+  contents: read
+jobs:
+  dm32:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 72651afe059e76ba0274c481d58cd63552370ae7
+          persist-credentials: false
+          submodules: recursive
+      - name: Build and identify firmware
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 72651afe059e76ba0274c481d58cd63552370ae7
+          tools/docker/csky-toolchain/run.sh make -j2 BOARD=dm32
+          tools/docker/csky-toolchain/run.sh make BOARD=dm32 size
+          sha256sum build/dm32/rfoundry_dm32.bin
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: dm32-incoming-display-72651afe
+          path: build/dm32/rfoundry_dm32.bin
+          if-no-files-found: error
+      - name: Test and render the incoming call screen
+        run: |
+          make -C tests/host -j2 uiFlowTest uiFlowTestNoColor
+          (cd tests/host && ./uiFlowTest && ./uiFlowTestNoColor)
+          make -C tests/host ui-gallery
+          mkdir -p /tmp/rf-gallery
+          cd docs/ux/screens
+          find . -name incoming-call.png -exec cp --parents {} /tmp/rf-gallery/ \;
+          test -n "$(find /tmp/rf-gallery -name incoming-call.png -print -quit)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: incoming-call-gallery
+          path: /tmp/rf-gallery
+          if-no-files-found: error
