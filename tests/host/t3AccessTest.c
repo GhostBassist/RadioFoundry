@@ -2296,6 +2296,30 @@ static void test_hytera_pdata_grant(void)
 	CHECK(t3_ms_data_ready(&ms, T), "ready to transmit packet data on the granted slot");
 }
 
+static void test_hytera_pdui_grant(void)
+{
+	t3_ms_t ms;
+	setup(T3_OPT_PRIVATE, true);
+	camp_registered(&ms);
+	CHECK(t3_ms_pdata(&ms, T, T3_ID_HYTERA_PDUI, false) && sent_rand(&ms), "request dedicated uplink");
+
+	// Captured BSCU-to-CHU grant with the subscriber ID adapted to this fixture.
+	uint8_t hdr[T3_CSBK_BYTES] = { 0x33, 0, 0xFF, 0xF8, OWN >> 16, (OWN >> 8) & 0xFF, OWN & 0xFF,
+				      0xFF, 0xFD, 0x02 };
+	uint8_t cont[T3_CSBK_BYTES] = { 0xB3, 0, 0, 0xC0, 0x49, 0x10, 0, 0x12, 0x32, 0xC0 };
+	t3_crc_append(hdr, T3_CRC_MASK_MBC_HDR);
+	t3_crc_append(cont, 0);
+	t3_ms_rx(&ms, T, 1, T3_DT_MBC_HDR, CC, hdr);
+	T += 60;
+	t3_ms_rx(&ms, T, 1, T3_DT_MBC_CONT, CC, cont);
+	CHECK(ms.state == T3_FOLLOW && ms.call.ours && ms.call.data && ms.call.dst == T3_ID_HYTERA_PDUI &&
+	      ms.call.src == OWN && ms.ax.result == T3_RES_GRANTED, "addressed PDUI grant completes the uplink request");
+	poll_all(&ms);
+	CHECK(tuned.payload && tuned.slot == 2 && tuned.chan.tx_hz == 145000000u, "dedicated uplink tunes to slot 2");
+	frames(&ms, 3);
+	CHECK(t3_ms_data_ready(&ms, T), "dedicated uplink can start data TX after tuning");
+}
+
 // Packet data (6.6.3): the radio asks for a data channel and follows PD_GRANT / TD_GRANT; to it, the TSCC checks it is
 // there first. The data service sends on the call (the radio side), PTT doesn't
 static void test_pdata(void)
@@ -3162,6 +3186,7 @@ int main(void)
 	test_cli_call();
 	test_pdata();
 	test_hytera_pdata_grant();
+	test_hytera_pdui_grant();
 	test_pdata_ip();
 	test_ip_advice();
 	test_deregister();

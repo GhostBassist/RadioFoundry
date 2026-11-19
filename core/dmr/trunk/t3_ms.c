@@ -451,6 +451,16 @@ static void follow(t3_ms_t *ms, uint32_t now, const t3_csbk_t *p, const t3_chan_
 // appended CG_AP gave the frequencies
 static void on_grant(t3_ms_t *ms, uint32_t now, const t3_csbk_t *p, const t3_chan_t *chan)
 {
+	// Hytera addresses the PDUI grant to the requester of the uplink.
+	t3_csbk_t uplink;
+	if (ms->state == T3_CAMPED && ms->ax.state != T3_AX_IDLE && ms->ax.svc == T3_SVC_PDATA &&
+	    !ms->ax.group && ms->ax.dst == T3_ID_HYTERA_PDUI && p->op == T3_OP_PD_GRANT &&
+	    p->u.grant.src == T3_ID_HYTERA_PDUI && is_me(ms, p->u.grant.dst)) {
+		uplink = *p;
+		uplink.u.grant.src = p->u.grant.dst;
+		uplink.u.grant.dst = p->u.grant.src;
+		p = &uplink;
+	}
 	bool group = false;
 	if (ms->state == T3_CAMPED) {
 		ms->st.grants++;
