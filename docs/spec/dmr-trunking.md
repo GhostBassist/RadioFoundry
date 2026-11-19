@@ -228,7 +228,7 @@ every burst; the radio core only sends it in the slot it is told.
 | Call | When |
 |---|---|
 | `t3_ms_request` | PTT while camped: a voice call to a talkgroup or an individual. False (`ax.result` says why) when not allowed now |
-| `t3_ms_cancel` | PTT released before the grant |
+| `t3_ms_cancel` | PTT released before a grant or private-call alerting |
 | `t3_ms_end_call` | the user ends the call being followed |
 | `t3_ms_deregister` | the debug link's DEREG. Leaving a system or switching off sends nothing (section 12.4) |
 | `t3_ms_can_talk` | may the user talk on the payload channel now |
@@ -331,6 +331,7 @@ radio's ID, also when a talkgroup was addressed (table 6.28).
 | radio check (kind registration, from TSI; 6.4.12) | MS_Accepted |
 | voice radio check (P_AHOY kind individual or talkgroup voice, from TSI; tables 6.42, 6.43) | P_ACKU MS_Accepted (6.6.2.3.2.1) |
 | availability check (kind individual voice): OACSU | MS_Accepted |
+| private voice page with Service_Kind_Flag set: FOACSU | MS_Alerting while ringing. The screen shows the caller ID and “Press PTT to Answer”. PTT sends C_RAND Answer and dismisses the prompt. Press PTT again after the grant to speak. |
 | availability check (kind individual packet data) | Message_Accepted (section 7.7); EquipBusy_Refused (0x13) while the data service sends; not supported in a build without it |
 | availability check (kind duplex voice or duplex packet data) | MS_Duplex_Not_Supported (0x16): the radio is simplex (6.6.9.2.5, 6.6.10.2.5). It never follows a duplex grant (53, 54), whose bit 15 is Call Direction; their payload channel always uses offset timing (tables 7.10, 7.14) |
 | packet data radio check (P_AHOY kind packet data, from TSI) | P_ACKU Message_Accepted (6.6.3.3.2.1) |
@@ -821,7 +822,7 @@ field at its widest. `radioCoreTest` runs the radio core with the engine: start,
 | Slots | Each slot tick from the modem goes to `t3_ms_slot` with its slot number and its CACH AT bit (`DMR_TICK_AT_KNOWN`, `DMR_TICK_AT_BUSY`). A modem that doesn't number slots gets them alternating; one that doesn't read AT gets every slot free. The HR_C6000 and HR_C7000 drivers number them and read AT once locked to the CACH's TC ([modem-hrc7000.md](modem-hrc7000.md) 2.5). |
 | Receive | The stack's receive tap hands CSBKs and MBC blocks to `t3_ms_rx`. Any other burst on a known slot, idle ones excepted, is activity on that slot (`t3_ms_activity`). |
 | Send | A `T3_ACT_SEND` keys one CSBK as a data list, on the action's slot only, and not while the radio is talking. A `T3_ACT_TUNE` that comes while the list is still with the stack waits until it has gone out (at most 500 ms): a new slot or channel would drop it, and an answer before leaving a payload channel (a selective clear's P_ACKU) would never be sent. |
-| PTT | Camped, PTT asks for a call to the system's talk target (the first talkgroup with `T3_TG_TALK` when none is set) and waits with PTT held. The grant puts the radio on the payload slot and keys it. A refusal, no answer or timeout denies TX (`TXDENY_NO_DMR`). Released before the grant, the request is canceled. |
+| PTT | Camped, PTT asks for a call to the system's talk target (the first talkgroup with `T3_TG_TALK` when none is set) and waits with PTT held. The grant puts the radio on the payload slot and keys it. A refusal, no answer or timeout denies TX (`TXDENY_NO_DMR`). Releasing PTT before a grant cancels the request unless the called user is already ringing. Once ringing, the request stays pending and a grant with PTT released leaves the mic closed until the next press. |
 | Following | The stack takes the system's ID as its own, hears every call on the slot, and talks to the call's group or to the other party. The radio's own transmission counts as the call's activity: it never hears its own slot, so TV_Inactive would otherwise end the call while it talks. |
 | Status | `RADIO_T3_STATUS` sends the staged status (section 7.5). The last status heard is in the view. |
 | Short data poll | `RADIO_T3_SDPOLL` polls the staged MS (section 7.6). The reply to a poll is staged with the system (`DL_T3_POLL_REPLY`). |
