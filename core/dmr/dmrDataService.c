@@ -13,6 +13,7 @@
 #include "dmr/dmr_emergency.h"
 #endif
 #include "dmr/call/dmr_lc.h"
+#include "dmr/trunk/t3_pdu.h"
 #if CONFIG_ZONE_SHARE
 #include "dmr/zoneShare.h"
 #endif
@@ -628,28 +629,45 @@ static void ipFinish(uint8_t result)
 	ipx.result = result;
 }
 
-// Bench format from a native Hytera v2 SMS. The captured value at bytes 8–9
-// varies between sends; use the packet ID so it stays the same on a retry.
-static int hyteraV2SmsPayload(const uint8_t *udp, int udpLength, uint16_t packetId, const uint8_t **pdu)
+static bool hyteraDedicatedSms(void)
 {
-	static uint8_t packet[DMR_ETSI_TEXT_UDP_MAX + 2];
+	return channel.trunked && ipx.sms && ipx.confirmed && sms.format == DMR_SMS_FORMAT_ETSI_IP;
+}
+
+// The dedicated v2 envelope carries the subscriber IDs separately from the gateway link address.
+static int hyteraV2SmsPayload(const uint8_t *udp, int udpLength, uint32_t src, uint32_t dst,
+							 uint16_t packetId, const uint8_t **pdu)
+{
+	static const uint8_t header[] = {
+		0x02, 0x01, 0, 0, 0x68, 0x07,
+		0x00, 0x01, 0x00, 0x04, 0, 0, 0, 0,
+		0x00, 0x02, 0x00, 0x04, 0, 0, 0, 0,
+		0x00, 0x03, 0x00, 0x04, 0, 0, 0, 0,
+		0x01, 0x01, 0x00, 0x02, 0x00, 0x07,
+		0x01, 0x02, 0, 0,
+	};
+	static uint8_t packet[sizeof(header) + DMR_ETSI_TEXT_UDP_MAX - 8];
 	if (udpLength <= 8 || udpLength > DMR_ETSI_TEXT_UDP_MAX)
 	{
 		return 0;
 	}
-	int length = udpLength + 2;
+	int textLength = udpLength - 8;
+	int length = sizeof(header) + textLength;
 	int contentLength = length - 4;
-	packet[0] = 0x02;
-	packet[1] = 0x01;
+	memcpy(packet, header, sizeof(header));
 	packet[2] = (uint8_t)(contentLength >> 8);
 	packet[3] = (uint8_t)contentLength;
-	packet[4] = 0x08;
-	packet[5] = 0x01;
-	packet[6] = 0x00;
-	packet[7] = 0x01;
-	packet[8] = (uint8_t)(packetId >> 8);
-	packet[9] = (uint8_t)packetId;
-	memcpy(packet + 10, udp + 8, udpLength - 8);
+	packet[12] = (uint8_t)(packetId >> 8);
+	packet[13] = (uint8_t)packetId;
+	packet[19] = (uint8_t)(src >> 16);
+	packet[20] = (uint8_t)(src >> 8);
+	packet[21] = (uint8_t)src;
+	packet[27] = (uint8_t)(dst >> 16);
+	packet[28] = (uint8_t)(dst >> 8);
+	packet[29] = (uint8_t)dst;
+	packet[38] = (uint8_t)(textLength >> 8);
+	packet[39] = (uint8_t)textLength;
+	memcpy(packet + sizeof(header), udp + 8, textLength);
 	*pdu = packet;
 	return length;
 }
@@ -660,12 +678,14 @@ static void ipTransmit(void)
 	// Our own address follows the channel's ID (sent from the channel's ID, as the gateway's packets are)
 	uint32_t srcIp = (ipx.srcIp != DMR_DATA_IP_OURS) ? ipx.srcIp : dmrDataIdAddress(false, channel.ownId);
 	uint32_t dstIp = (ipx.dstIp != DMR_DATA_IP_OURS) ? ipx.dstIp : dmrDataIdAddress(ipx.group, ipx.dst);
-	bool hyteraV2 = channel.trunked && ipx.sms && ipx.confirmed && sms.format == DMR_SMS_FORMAT_ETSI_IP;
+	bool hyteraV2 = hyteraDedicatedSms();
+	uint32_t linkDst = hyteraV2 ? T3_ID_HYTERA_PDUI : ipx.dst;
+	uint8_t confirmedRate = hyteraV2 ? DMR_TYPE_RATE_1_2 : ipConfirmedRate;
 	int n;
 	if (hyteraV2)
 	{
-		ipx.sap = 0; // SAP carried by the captured Hytera confirmed header.
-		n = hyteraV2SmsPayload(ipx.l4, ipx.length, ipx.ipId, &pdu);
+		ipx.sap = DMR_SAP_PROPRIETARY;
+		n = hyteraV2SmsPayload(ipx.l4, ipx.length, channel.ownId, ipx.dst, ipx.ipId, &pdu);
 	}
 	else
 	{
@@ -682,7 +702,7 @@ static void ipTransmit(void)
 	if (ipx.confirmed)
 	{
 		// One burst kept for the terminator
-		count = dmrDataBuildConfirmed(ipx.sap, ipx.dst, channel.ownId, pdu, n, ipConfirmedRate, ipx.ns, ipx.firstTry,
+		count = dmrDataBuildConfirmed(ipx.sap, linkDst, channel.ownId, pdu, n, confirmedRate, ipx.ns, ipx.firstTry,
 										(ipx.blocks != 0) ? ipx.blocks : ~0ULL, ipCnfPreambles(), txBursts, DMR_DATA_MAX_BURSTS - 1);
 		if ((count == 0) && (ipx.tries == 0))
 		{
@@ -749,7 +769,7 @@ static void ipTransmit(void)
 	}
 	if (ipx.tries == 0)
 	{
-		dmrDataCountIpTx(ipx.sap, pdu, n, ipx.confirmed ? ipConfirmedRate : IP_UNCONFIRMED_RATE, ipx.confirmed);
+		dmrDataCountIpTx(ipx.sap, pdu, n, ipx.confirmed ? confirmedRate : IP_UNCONFIRMED_RATE, ipx.confirmed);
 		stats.ipConfirmed += ipx.confirmed ? 1 : 0;
 	}
 	else
@@ -1014,7 +1034,8 @@ static bool ipResponse(const dmrDataPacket_t *packet)
 	bool late = ((ipx.state == IPX_QUEUED) && (ipx.tries > 0)) ||
 				((ipx.state == IPX_SENDING) && (txKind == TXK_IP) && (txRunning || (txPending && (ipx.tries > 1))));
 
-	if (((ipx.state != IPX_WAITING) && !late) || !ipx.confirmed || (packet->src != ipx.dst) || (packet->sap != ipx.sap))
+	uint32_t ackSource = hyteraDedicatedSms() ? T3_ID_HYTERA_PDUI : ipx.dst;
+	if (((ipx.state != IPX_WAITING) && !late) || !ipx.confirmed || (packet->src != ackSource) || (packet->sap != ipx.sap))
 	{
 		return false;
 	}
@@ -2942,11 +2963,6 @@ void dmrDataServiceResetStats(void)
 const char *dmrDataServiceTxKindName(uint8_t kind)
 {
 	return (kind < TXK_COUNT) ? txKindNames[kind] : "?";
-}
-
-bool dmrDataServiceTxIsConfirmedSms(void)
-{
-	return txKind == TXK_IP && ipx.sms && ipx.confirmed && ipx.state == IPX_SENDING;
 }
 
 const char *dmrDataServiceTxStartingName(void)

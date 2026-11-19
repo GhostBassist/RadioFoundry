@@ -50,6 +50,7 @@
 
 #define T3_FID_HYTERA_DT_CHECK	0x68u
 #define T3_HYTERA_DT_CHECK_ID	0xFFFD01u
+#define T3_ID_HYTERA_PDUI	0xFFFD02u	// Dedicated packet-data uplink gateway
 #define T3_FID_HYTERA		0x08u	// feature ID seen on Hytera absolute packet data grants
 
 // Gateway and special addresses (A.4)

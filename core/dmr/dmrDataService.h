@@ -359,7 +359,6 @@ void dmrDataServiceGetStats(dmrDataStats_t *stats);
 const char *dmrDataServiceTxKindName(uint8_t kind);
 // What the list being started now is for, as dmrDataServiceTxKindName gives it (the host's txStart may log it)
 const char *dmrDataServiceTxStartingName(void);
-bool dmrDataServiceTxIsConfirmedSms(void);
 void dmrDataServiceResetStats(void);
 
 #endif
