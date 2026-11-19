@@ -628,14 +628,49 @@ static void ipFinish(uint8_t result)
 	ipx.result = result;
 }
 
+// Bench format from a native Hytera v2 SMS. The captured value at bytes 8–9
+// varies between sends; use the packet ID so it stays the same on a retry.
+static int hyteraV2SmsPayload(const uint8_t *udp, int udpLength, uint16_t packetId, const uint8_t **pdu)
+{
+	static uint8_t packet[DMR_ETSI_TEXT_UDP_MAX + 2];
+	if (udpLength <= 8 || udpLength > DMR_ETSI_TEXT_UDP_MAX)
+	{
+		return 0;
+	}
+	int length = udpLength + 2;
+	packet[0] = 0x02;
+	packet[1] = 0x01;
+	packet[2] = (uint8_t)(length >> 8);
+	packet[3] = (uint8_t)length;
+	packet[4] = 0x08;
+	packet[5] = 0x01;
+	packet[6] = 0x00;
+	packet[7] = 0x01;
+	packet[8] = (uint8_t)(packetId >> 8);
+	packet[9] = (uint8_t)packetId;
+	memcpy(packet + 10, udp + 8, udpLength - 8);
+	*pdu = packet;
+	return length;
+}
+
 static void ipTransmit(void)
 {
 	const uint8_t *pdu;
 	// Our own address follows the channel's ID (sent from the channel's ID, as the gateway's packets are)
 	uint32_t srcIp = (ipx.srcIp != DMR_DATA_IP_OURS) ? ipx.srcIp : dmrDataIdAddress(false, channel.ownId);
 	uint32_t dstIp = (ipx.dstIp != DMR_DATA_IP_OURS) ? ipx.dstIp : dmrDataIdAddress(ipx.group, ipx.dst);
-	int n = dmrDataEncodeIP(ipx.group, ipx.dst, channel.ownId, dstIp, srcIp, ipx.ttl, ipx.protocol, ipx.l4, ipx.length,
+	bool hyteraV2 = channel.trunked && ipx.sms && ipx.confirmed && sms.format == DMR_SMS_FORMAT_ETSI_IP;
+	int n;
+	if (hyteraV2)
+	{
+		ipx.sap = 0; // SAP carried by the captured Hytera confirmed header.
+		n = hyteraV2SmsPayload(ipx.l4, ipx.length, ipx.ipId, &pdu);
+	}
+	else
+	{
+		n = dmrDataEncodeIP(ipx.group, ipx.dst, channel.ownId, dstIp, srcIp, ipx.ttl, ipx.protocol, ipx.l4, ipx.length,
 							ipx.compress, ipx.ipId, &pdu, &ipx.sap);
+	}
 	int count = 0;
 
 	if (n <= 0)
@@ -650,6 +685,11 @@ static void ipTransmit(void)
 										(ipx.blocks != 0) ? ipx.blocks : ~0ULL, ipCnfPreambles(), txBursts, DMR_DATA_MAX_BURSTS - 1);
 		if ((count == 0) && (ipx.tries == 0))
 		{
+			if (hyteraV2)
+			{
+				ipFinish(DMR_REQ_FAILED);
+				return;
+			}
 			stats.ipCnfTooLong++;// longer than one confirmed packet can carry: as it would go without the setting
 			ipx.confirmed = false;
 		}
