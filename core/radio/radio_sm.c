@@ -11,6 +11,7 @@
 #include "settings/settings.h"
 #include "config.h"
 #include "hal_dtmf.h"
+#include "debuglink/dlog.h"
 #include "codeplug/codeplug_modes.h"	// channel kinds (docs/spec/channel-modes.md): parked channels, in every build
 #include "codeplug/codeplug_tag.h"	// CODEPLUG_SYSTEM_NONE
 #if CONFIG_ZONE_WRITE
@@ -2646,7 +2647,10 @@ static void data_t3_tick(radio_sm_t *sm, uint32_t now_ms)
 	if (t3m.state == T3_FOLLOW && t3m.call.data && t3m.call.ours) {
 		if (t3_ms_data_ready(&t3m, now_ms) && !sm->ptt) {
 			data_tx.t3_wait = false;
+			dlog("sms submit dst=%u n=%u slot=%u", (unsigned)data_tx.t3_dst,
+			     (unsigned)data_tx.count, sm->view.ch.timeslot);
 			if (!data_send(sm, data_tx.list, data_tx.count)) {
+				dlog("sms submit rejected");
 				dmrDataServiceTxDone(DMR_TX_ERR_REJECTED);
 			} else {
 				data_tx.t3_sent = true;
@@ -3090,6 +3094,10 @@ static void t3_retune(radio_sm_t *sm, const t3_chan_t *c, uint8_t slot, uint32_t
 	ch->dmo = false;
 	ch->color_code = t3_chan_cc(sm, c);
 	ch->timeslot = ts;	// a control channel: its first slot carries the TSCC (dedicated)
+	if (t3m.state == T3_FOLLOW && t3m.call.data) {
+		dlog("sms tune rx=%u tx=%u slot=%u cc=%u rf=%u",
+		     (unsigned)ch->rx_hz, (unsigned)ch->tx_hz, ts, ch->color_code, rf);
+	}
 	sm->t3_cc = ch->color_code;
 	sm->t3_both = slot == 0;
 	sm->temp_ts = 0;
@@ -3200,7 +3208,24 @@ static bool t3_tap(const dmr_burst_t *b, uint32_t now_ms, void *ctx)
 #else
 		t3m.data_nack = T3_RC_MS_NOT_SUPPORTED;
 #endif
+#if CONFIG_DEBUGLINK
+		bool pd_hdr = b->kind == DMR_BURST_MBC_HEADER &&
+			      (b->payload[0] & 0x3Fu) == T3_OP_PD_GRANT &&
+			      b->payload[1] == T3_FID_HYTERA;
+		bool pd_cont = b->kind == DMR_BURST_MBC_CONT &&
+			       (b->payload[0] & 0x3Fu) == T3_OP_PD_GRANT;
+		uint32_t crc_before = t3m.st.crc_bad;
+		uint32_t followed_before = t3m.st.followed;
+#endif
 		t3_ms_rx(&t3m, now_ms, slot, b->kind, b->cc, b->payload);
+#if CONFIG_DEBUGLINK
+		if (pd_hdr || pd_cont) {
+			dlog("sms grant %02x%02x slot=%u open=%u int=%u crc_bad=%u follow=%u",
+			     b->payload[0], b->payload[1], slot, t3m.mbc[slot - 1].open,
+			     t3m.mbc[slot - 1].has_intermediate, t3m.st.crc_bad != crc_before,
+			     t3m.st.followed != followed_before);
+		}
+#endif
 		if (b->kind != DMR_BURST_RATE_12_DATA) {
 			// A UDT header's opcode is in octet 9
 			radio_t3v.last_rx_op = b->payload[b->kind == DMR_BURST_DATA_HEADER ? 9 : 0] & 0x3Fu;
