@@ -20,9 +20,7 @@
 #ifndef DMR_RX_TRACE
 #define DMR_RX_TRACE	CONFIG_DEBUGLINK
 #endif
-#if DMR_RX_TRACE
 #include "debuglink/dlog.h"
-#endif
 
 const uint8_t dmr_ambe_silence[DMR_AMBE_FRAME_BYTES] = { 0xB9, 0xE8, 0x81, 0x52, 0x61, 0x73, 0x00, 0x2A, 0x6B };
 
@@ -1509,7 +1507,11 @@ static void data_end(uint8_t err)
 	s.tx = TX_NONE;
 	s.dirty = true;
 	TR_TX(d.tag, true, err, s.now - s.tx_since);
-	dlog("sms modem end err=%u queued=%u started=%u", err, s.queued, s.started);
+#if CONFIG_DEBUGLINK
+	if (!d.tag || strcmp(d.tag, "t3") != 0) {
+		dlog("sms modem end ts=%u err=%u queued=%u started=%u", s.cfg.ts, err, s.queued, s.started);
+	}
+#endif
 	if (d.done)
 		d.done(err, d.ctx);
 	if (s.ptt)
@@ -1534,13 +1536,15 @@ static void tx_data_fill(uint32_t now)
 		if (!s.modem->tx_queue(&s.data_stage))
 			return;	// kept staged for the next poll
 #if CONFIG_DEBUGLINK
-		const uint8_t *p = s.data_stage.payload;
-		if (s.data_stage.kind == DMR_BURST_DATA_HEADER && s.data_stage.len >= 12) {
-			dlog("sms hdr %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-			     p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11]);
+		if (s.data_stage.kind != DMR_BURST_CSBK) {
+			const uint8_t *p = s.data_stage.payload;
+			if (s.data_stage.kind == DMR_BURST_DATA_HEADER && s.data_stage.len >= 12) {
+				dlog("sms hdr %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+				     p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11]);
+			}
+			dlog("sms queue n=%u kind=%u len=%u crc_mcu=%u", s.queued + 1u,
+			     s.data_stage.kind, s.data_stage.len, s.data_stage.host_crc);
 		}
-		dlog("sms queue n=%u kind=%u len=%u crc_mcu=%u", s.queued + 1u,
-		     s.data_stage.kind, s.data_stage.len, s.data_stage.host_crc);
 #endif
 		s.data_staged = false;
 		s.queued++;
@@ -1557,9 +1561,7 @@ static void tx_start_data(uint32_t now)
 		// slot timing of a reception only briefly (the HR_C6000 engine: 390 ms), so not DMR_CALL_ALIGN_MS here: an
 		// aligned start after that waits for a slot that never comes and is refused (found by dmrDataChainTest)
 		timing = dmo_timing(now, DMR_CALL_DATA_ALIGN_MS);
-	dlog("sms modem begin ts=%u timing=%u n=%u", s.cfg.ts, timing, s.data.count);
 	if (!s.modem->tx_begin(timing, (int8_t)s.cfg.ts, DMR_ACCESS_IMPOLITE)) {
-		dlog("sms modem begin rejected");
 		tx_deny(DMR_TX_ERR_REJECTED);
 		return;
 	}
@@ -1745,7 +1747,10 @@ static void tx_poll(uint32_t now)
 		break;
 	case TX_DATA_END:
 		if (!before(now, s.deadline))
-			dlog("sms modem TX_DONE timeout");
+#if CONFIG_DEBUGLINK
+			if (!s.data.tag || strcmp(s.data.tag, "t3") != 0)
+				dlog("sms modem TX_DONE timeout");
+#endif
 			data_end(DMR_TX_OK);	// tx_done overdue: the bursts went (data_end aborts the modem)
 		break;
 	default:
@@ -1832,7 +1837,10 @@ static void handle_event(const evq_item_t *it, uint32_t now)
 		} else if (s.tx == TX_END) {
 			tx_finished(now);
 		} else if (s.tx == TX_DATA_END) {
-			dlog("sms modem TX_DONE");
+#if CONFIG_DEBUGLINK
+			if (!s.data.tag || strcmp(s.data.tag, "t3") != 0)
+				dlog("sms modem TX_DONE");
+#endif
 			data_end(DMR_TX_OK);
 		} else if (s.tx == TX_WAKE && s.started != 0) {
 			// Only once our CSBK went: a refused voice start's DMR_EV_TX_DONE follows its DMR_EV_TX_REJECTED, after
