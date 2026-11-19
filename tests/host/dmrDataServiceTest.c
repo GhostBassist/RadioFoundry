@@ -1659,6 +1659,31 @@ static void testIpText(void)
 	CHECK((events[DMR_DATA_EV_SMS_SENT] == 1) && (stats.ipTextSent >= 1));
 	runMainTask(SMS_ACK_MS + 1000);
 	CHECK(sentCount == 1);// never sent again
+	// Hytera PDUI ACKs can carry zero for a confirmed packet with a nonzero sequence.
+	reset();
+	ch.trunked = true;
+	ch.rmo = true;
+	decodeTx = false;
+	CHECK(sms_send(101124, false, "dedicated first", true, DMR_SMS_FORMAT_ETSI_IP));
+	runMainTask(300);
+	th = txHeader();
+	CHECK(th != NULL && (th->payload[9] >> 4) == 0);
+	respond(0xFFFD02, DMR_SAP_PROPRIETARY, DMR_RESPONSE_ACK(0), NULL);
+	CHECK(sms_send_state() == DMR_REQ_OK);
+	CHECK(sms_send(101124, false, "dedicated next", true, DMR_SMS_FORMAT_ETSI_IP));
+	runMainTask(300);
+	th = txHeader();
+	CHECK(th != NULL && (th->payload[9] >> 4) == 1);
+	respond(RADIO_A, DMR_SAP_PROPRIETARY, DMR_RESPONSE_ACK(0), NULL);
+	CHECK(sms_send_state() == DMR_REQ_SENDING);
+	respond(0xFFFD02, DMR_SAP_PROPRIETARY, DMR_RESPONSE_ACK(2), NULL);
+	CHECK(sms_send_state() == DMR_REQ_SENDING);
+	respond(0xFFFD02, DMR_SAP_PROPRIETARY, DMR_RESPONSE_ACK(0), NULL);
+	CHECK(sms_send_state() == DMR_REQ_OK);
+	decodeTx = true;
+	ch.trunked = false;
+	ch.rmo = false;
+
 	// No response: the IP packet tries, then failed; the gateway's own packets wait meanwhile
 	reset();
 	uint32_t failed = stats.smsFailed;

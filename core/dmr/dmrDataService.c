@@ -1039,7 +1039,8 @@ static bool ipResponse(const dmrDataPacket_t *packet)
 	bool late = ((ipx.state == IPX_QUEUED) && (ipx.tries > 0)) ||
 				((ipx.state == IPX_SENDING) && (txKind == TXK_IP) && (txRunning || (txPending && (ipx.tries > 1))));
 
-	uint32_t ackSource = hyteraDedicatedSms() ? T3_ID_HYTERA_PDUI : ipx.dst;
+	bool hytera = hyteraDedicatedSms();
+	uint32_t ackSource = hytera ? T3_ID_HYTERA_PDUI : ipx.dst;
 	if (((ipx.state != IPX_WAITING) && !late) || !ipx.confirmed || (packet->src != ackSource) || (packet->sap != ipx.sap))
 	{
 		return false;
@@ -1054,7 +1055,8 @@ static bool ipResponse(const dmrDataPacket_t *packet)
 	switch (DMR_RESPONSE_CLASS(r))
 	{
 		case 0:
-			if ((DMR_RESPONSE_TYPE(r) != 1) || (status != ipx.ns))
+			// The Hytera PDUI can return zero after accepting a nonzero send sequence.
+			if ((DMR_RESPONSE_TYPE(r) != 1) || ((status != ipx.ns) && !(hytera && status == 0)))
 			{
 				return false;// not the ACK of this packet
 			}
