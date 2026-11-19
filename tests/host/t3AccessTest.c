@@ -3090,6 +3090,31 @@ static void test_other_slot(void)
 	CHECK(nsent == 2 && sent_act[1].slot == 2, "a control slot after its Aloha");
 }
 
+static void test_hytera_data_terminal_check(void)
+{
+	t3_ms_t ms;
+	setup(T3_OPT_PRIVATE, true);
+	camp_registered(&ms);
+	nsent = 0;
+	uint8_t check[T3_CSBK_BYTES] = {
+		0x9C, 0x68, 0x0E, 0x07, OWN >> 16, (OWN >> 8) & 0xFF, OWN & 0xFF, 0xFF, 0xFD, 0x01,
+	};
+
+	check[6] ^= 1u;
+	t3_crc_append(check, T3_CRC_MASK_CSBK);
+	t3_ms_rx(&ms, T, 1, T3_DT_CSBK, CC, check);
+	frames(&ms, 1);
+	CHECK(nsent == 0, "another terminal's check is ignored");
+
+	check[6] ^= 1u;
+	t3_crc_append(check, T3_CRC_MASK_CSBK);
+	t3_ms_rx(&ms, T, 1, T3_DT_CSBK, CC, check);
+	frames(&ms, 1);
+	CHECK(nsent == 1 && sent_act[0].slot == 1 && sent[0].op == T3_OP_C_ACKU &&
+	      sent[0].u.ack.reason == T3_RC_MS_ACCEPTED && sent[0].u.ack.dst == T3_HYTERA_DT_CHECK_ID &&
+	      sent[0].u.ack.src == OWN, "answer the Hytera data terminal check on its control slot");
+}
+
 int main(void)
 {
 	test_register();
@@ -3108,6 +3133,7 @@ int main(void)
 	test_private_call();
 	test_cancel();
 	test_ahoy();
+	test_hytera_data_terminal_check();
 	test_other_slot();
 	test_broadcast();
 	test_stun();
