@@ -13,18 +13,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 188639e8e08cca57660c2767001184ef1a78dd0a
+          ref: a74fd925fd34ea13a6ba120f055b56ce7a5308fc
           persist-credentials: false
           submodules: recursive
       - name: Build and identify firmware
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 188639e8e08cca57660c2767001184ef1a78dd0a
+          test "$(git rev-parse HEAD)" = a74fd925fd34ea13a6ba120f055b56ce7a5308fc
           tools/docker/csky-toolchain/run.sh make -j2 BOARD=dm32 CONFIG_DEBUGLINK=y
           tools/docker/csky-toolchain/run.sh make BOARD=dm32 size
           sha256sum build/dm32/rfoundry_dm32.bin
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: dm32-hytera-sms-debug-188639e8
+          name: dm32-hytera-sms-debug-a74fd925
           path: build/dm32/rfoundry_dm32.bin
           if-no-files-found: error
