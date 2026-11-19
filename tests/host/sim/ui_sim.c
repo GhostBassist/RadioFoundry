@@ -2153,7 +2153,7 @@ bool ui_svc_msg_send(uint32_t dst, bool group, const char *text)
 }
 bool ui_svc_msg_reply(uint16_t i, const char *text)
 {
-	return i < n_inbox && ui_svc_msg_send(inbox[i].src, false, text);
+	return i < n_inbox && ui_svc_msg_send(inbox[i].m.src, false, text);
 }
 bool ui_svc_aprs_send_message(const char *to, const char *text, uint8_t flags)
 {
