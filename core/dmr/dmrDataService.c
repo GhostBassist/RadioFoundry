@@ -638,10 +638,11 @@ static int hyteraV2SmsPayload(const uint8_t *udp, int udpLength, uint16_t packet
 		return 0;
 	}
 	int length = udpLength + 2;
+	int contentLength = length - 4;
 	packet[0] = 0x02;
 	packet[1] = 0x01;
-	packet[2] = (uint8_t)(length >> 8);
-	packet[3] = (uint8_t)length;
+	packet[2] = (uint8_t)(contentLength >> 8);
+	packet[3] = (uint8_t)contentLength;
 	packet[4] = 0x08;
 	packet[5] = 0x01;
 	packet[6] = 0x00;
