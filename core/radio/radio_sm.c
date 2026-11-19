@@ -2396,6 +2396,7 @@ static struct {
 #if CONFIG_DMR_TRUNK_TX
 	// A Tier III system: list waits while the engine gets a packet data channel for it (data_t3_tick)
 	bool t3_wait;
+	bool t3_sms;		// waiting for a short data result
 	bool t3_asked;
 	bool t3_group;
 	uint32_t t3_dst;
@@ -2591,6 +2592,27 @@ static void data_t3_fail(uint8_t err)
 	dmrDataServiceTxDone(err);
 }
 
+// Tier III UDT uses UTF-16BE without a BOM or terminator. The editor supplies Latin-1.
+static bool data_t3_sms(uint32_t dst, bool group, const char *text, uint32_t now_ms, void *ctx)
+{
+	const radio_sm_t *sm = ctx;
+	uint8_t utf16[T3_UDT_MAX];
+	size_t len = strlen(text);
+	if (!sm->t3_on || sm->ptt || t3m.state != T3_CAMPED || len > sizeof utf16 / 2u) {
+		return false;
+	}
+	for (size_t i = 0; i < len; i++) {
+		utf16[2 * i] = 0;
+		utf16[2 * i + 1] = (uint8_t)text[i];
+	}
+	if (!t3_ms_sdata(&t3m, now_ms, dst, group, T3_UDTF_UTF16, utf16, (uint8_t)(2 * len))) {
+		return false;
+	}
+	data_tx.t3_sms = true;
+	dlog("sms udt request dst=%u utf16_bytes=%u", (unsigned)dst, (unsigned)(2 * len));
+	return true;
+}
+
 // From t3_tick: ask for the channel, send once on it, or give the list back failed
 static void data_t3_tick(radio_sm_t *sm, uint32_t now_ms)
 {
@@ -2598,6 +2620,12 @@ static void data_t3_tick(radio_sm_t *sm, uint32_t now_ms)
 		// The single item (and any confirmed retries) is over: so is the radio's data call (dmr-trunking.md 7.7)
 		data_tx.t3_sent = false;
 		t3_ms_data_done(&t3m, now_ms, dmrDataServiceIpFailures() == data_tx.t3_failures);
+	}
+	if (data_tx.t3_sms && (t3m.ax.svc != T3_SVC_SDATA || t3m.ax.state == T3_AX_IDLE)) {
+		bool ok = t3m.ax.svc == T3_SVC_SDATA && t3m.ax.result == T3_RES_DONE;
+		data_tx.t3_sms = false;
+		dlog("sms udt result=%u reason=%02x", t3m.ax.result, t3m.ax.reason);
+		dmrDataServiceTxDone(ok ? DMR_TX_OK : DMR_TX_ERR_NO_REPEATER);
 	}
 	if (!data_tx.t3_wait) {
 		return;
@@ -2886,6 +2914,9 @@ static void data_init(radio_sm_t *sm)
 	dmrDataEnv_t env = { .txStart = data_tx_start, .channelClear = data_channel_clear,
 			     .inRxGroup = data_in_rx_group, .ctx = sm,
 			     .noRate34 = board.dmr != NULL && board.dmr->tx_rate34_bad };
+#if CONFIG_DMR_TRUNK_TX
+	env.txSmsUdt = data_t3_sms;
+#endif
 #if CONFIG_DMR_AIR_QUEUE
 	airqInit();
 #endif
@@ -2967,6 +2998,7 @@ static void data_tick(radio_sm_t *sm, uint32_t now_ms)
 #if CONFIG_DMR_TRUNK
 	if (sm->t3_on) {
 		// A trunked system: the call's talkgroup; one registration for the system, whichever channel it is on
+		c.trunked = true;
 		c.talkGroup = t3m.state == T3_FOLLOW && t3m.call.group ? t3m.call.dst : 0;
 		vals[0] = t3s.cfg.own_id;
 		vals[1] = vals[2] = vals[3] = 0;
@@ -3158,6 +3190,9 @@ static void t3_send(radio_sm_t *sm, const t3_act_t *a, uint32_t now_ms)
 		return;
 	}
 	sm->t3_sending = true;
+	if (a->udt && (a->burst[9] & 0x3Fu) == T3_OP_C_UDTHU) {
+		dlog("sms udt upload slot=%u format=%x blocks=%u", a->slot, a->burst[1] & 0xFu, nb);
+	}
 	radio_t3v.last_tx_op = (a->udt ? a->burst[9] : a->burst[0]) & 0x3Fu;
 	memcpy(radio_t3v.last_tx, a->burst, T3_CSBK_BYTES);
 	radio_t3v.last_tx_ms = now_ms != 0 ? now_ms : 1;
@@ -3666,6 +3701,10 @@ static void t3_leave(radio_sm_t *sm)
 #if CONFIG_DMR_DATA_CORE && CONFIG_DMR_TRUNK_TX
 	if (data_tx.t3_wait) {
 		data_t3_fail(DMR_TX_ERR_REJECTED);	// the system went before its channel came
+	}
+	if (data_tx.t3_sms) {
+		data_tx.t3_sms = false;
+		dmrDataServiceTxDone(DMR_TX_ERR_REJECTED);
 	}
 	data_tx.t3_sent = false;	// its data call went with the engine: not the next engine's to end
 #endif
