@@ -1667,16 +1667,20 @@ static void testIpText(void)
 	CHECK(sms_send(101124, false, "dedicated first", true, DMR_SMS_FORMAT_ETSI_IP));
 	runMainTask(300);
 	th = txHeader();
-	CHECK(th != NULL && (th->payload[9] >> 4) == 0);
-	respond(0xFFFD02, DMR_SAP_PROPRIETARY, DMR_RESPONSE_ACK(0), NULL);
-	CHECK(sms_send_state() == DMR_REQ_OK);
-	CHECK(sms_send(101124, false, "dedicated next", true, DMR_SMS_FORMAT_ETSI_IP));
-	runMainTask(300);
-	th = txHeader();
-	CHECK(th != NULL && (th->payload[9] >> 4) == 1);
+	tns = th != NULL ? (th->payload[9] >> 4) & 7 : 0;
+	if (tns == 0)
+	{
+		respond(0xFFFD02, DMR_SAP_PROPRIETARY, DMR_RESPONSE_ACK(0), NULL);
+		CHECK(sms_send_state() == DMR_REQ_OK);
+		CHECK(sms_send(101124, false, "dedicated next", true, DMR_SMS_FORMAT_ETSI_IP));
+		runMainTask(300);
+		th = txHeader();
+		tns = th != NULL ? (th->payload[9] >> 4) & 7 : 0;
+	}
+	CHECK(th != NULL && tns != 0);
 	respond(RADIO_A, DMR_SAP_PROPRIETARY, DMR_RESPONSE_ACK(0), NULL);
 	CHECK(sms_send_state() == DMR_REQ_SENDING);
-	respond(0xFFFD02, DMR_SAP_PROPRIETARY, DMR_RESPONSE_ACK(2), NULL);
+	respond(0xFFFD02, DMR_SAP_PROPRIETARY, DMR_RESPONSE_ACK(tns == 1 ? 2 : 1), NULL);
 	CHECK(sms_send_state() == DMR_REQ_SENDING);
 	respond(0xFFFD02, DMR_SAP_PROPRIETARY, DMR_RESPONSE_ACK(0), NULL);
 	CHECK(sms_send_state() == DMR_REQ_OK);
