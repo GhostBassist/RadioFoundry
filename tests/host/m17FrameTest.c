@@ -156,6 +156,54 @@ static const hal_air_t provider = {
 	.tx_space = space_air, .tx_end = end_air, .tx_queue_depth = 1, .tx_chunk_syms = 80,
 };
 
+static void expect_transmit(m17_engine_t *engine, const uint8_t *wire, unsigned len)
+{
+	assert(air_session_tx_prime(&engine->session));
+	assert(air_session_tx_go(&engine->session));
+	unsigned bytes = 0;
+	while (pending) {
+		assert(bytes + queued.nsyms / 4 <= len);
+		assert(memcmp(queued.syms, wire + bytes, queued.nsyms / 4) == 0);
+		bytes += queued.nsyms / 4;
+		const air_event_t event = { .kind = (queued.flags & AIR_TX_LAST) ? AIR_EV_TX_DONE : AIR_EV_TX_SPACE };
+		pending = false;
+		on_air(&event, air_ctx);
+	}
+	assert(bytes == len);
+	assert(air_session_tx_state(&engine->session) == AIR_TX_DONE);
+}
+
+static bool voice_source(uint8_t speech[M17_STREAM_BYTES], bool *final, void *ctx)
+{
+	unsigned *calls = ctx;
+	if (++*calls == 1)
+		return false;
+	memset(speech, 0x20, M17_STREAM_BYTES);
+	*final = true;
+	return true;
+}
+
+static void transmit_voice(void)
+{
+	m17_engine_t engine;
+	unsigned calls = 0;
+	uint8_t silence[M17_STREAM_BYTES] = { 0 };
+	uint8_t speech[M17_STREAM_BYTES];
+	memset(speech, 0x20, sizeof(speech));
+	fit_flags = AIR_FIT_RX | AIR_FIT_TX;
+	assert(m17_engine_open(&engine, &provider, M17_CAN_ANY, NULL, NULL, NULL));
+	assert(m17_engine_prepare_voice(&engine, "AB1CD", NULL, 3, silence, voice_source, &calls));
+	uint8_t wire[5 * M17_FRAME_BYTES];
+	m17_voice_tx_t tx;
+	m17_preamble(wire);
+	assert(m17_voice_tx_start(&tx, "AB1CD", NULL, 3, wire + M17_FRAME_BYTES));
+	assert(m17_voice_tx_frame(&tx, silence, false, wire + 2 * M17_FRAME_BYTES));
+	assert(m17_voice_tx_frame(&tx, speech, true, wire + 3 * M17_FRAME_BYTES));
+	m17_end_marker(wire + 4 * M17_FRAME_BYTES);
+	expect_transmit(&engine, wire, sizeof(wire));
+	assert(calls == 2);
+}
+
 static void transmit_burst(void)
 {
 	const uint8_t payload[] = { 1 };
@@ -168,25 +216,13 @@ static void transmit_burst(void)
 	fit_flags = AIR_FIT_RX | AIR_FIT_TX;
 	assert(m17_engine_open(&engine, &provider, M17_CAN_ANY, NULL, NULL, NULL));
 	assert(m17_engine_prepare(&engine, "AB1CD", NULL, 9, payload, sizeof(payload)));
-	assert(air_session_tx_prime(&engine.session));
-	assert(air_session_tx_go(&engine.session));
 
 	m17_packet_burst_t expected;
 	uint8_t wire[4 * M17_FRAME_BYTES];
 	assert(m17_packet_burst_begin(&expected, link, payload, sizeof(payload)) == 0);
 	for (unsigned i = 0; i < 4; i++)
 		assert(m17_packet_burst_next(&expected, wire + i * M17_FRAME_BYTES) == 1);
-	unsigned bytes = 0;
-	while (pending) {
-		assert(bytes + queued.nsyms / 4 <= sizeof(wire));
-		assert(memcmp(queued.syms, wire + bytes, queued.nsyms / 4) == 0);
-		bytes += queued.nsyms / 4;
-		const air_event_t event = { .kind = (queued.flags & AIR_TX_LAST) ? AIR_EV_TX_DONE : AIR_EV_TX_SPACE };
-		pending = false;
-		on_air(&event, air_ctx);
-	}
-	assert(bytes == sizeof(wire));
-	assert(air_session_tx_state(&engine.session) == AIR_TX_DONE);
+	expect_transmit(&engine, wire, sizeof(wire));
 }
 
 static void receive_burst(bool gap, uint8_t rx_can)
@@ -367,6 +403,7 @@ static void receive_voice(bool late, uint8_t can, bool gap)
 
 int main(void)
 {
+	transmit_voice();
 	receive_voice(false, 6, false);
 	receive_voice(true, 6, false);
 	receive_voice(false, 5, false);

@@ -55,7 +55,7 @@ int m17_packet_burst_next(m17_packet_burst_t *burst, uint8_t frame[M17_FRAME_BYT
 {
 	switch (burst->stage) {
 	case BURST_PREAMBLE:
-		memset(frame, 0x77, M17_FRAME_BYTES);
+		m17_preamble(frame);
 		burst->stage = BURST_LINK;
 		return 1;
 	case BURST_LINK:
@@ -66,10 +66,7 @@ int m17_packet_burst_next(m17_packet_burst_t *burst, uint8_t frame[M17_FRAME_BYT
 		m17_packet_chunk_t chunk;
 		if (m17_packet_tx_next(&burst->packet, &chunk))
 			return m17_packet_encode(&chunk, frame) == 0 ? 1 : -1;
-		for (unsigned i = 0; i < M17_FRAME_BYTES; i += 2) {
-			frame[i] = 0x55;
-			frame[i + 1] = 0x5D;
-		}
+		m17_end_marker(frame);
 		burst->stage = BURST_DONE;
 		return 1;
 	}

@@ -36,6 +36,19 @@ uint16_t m17_crc(const uint8_t *data, size_t len)
 	return crc;
 }
 
+void m17_preamble(uint8_t frame[M17_FRAME_BYTES])
+{
+	memset(frame, 0x77, M17_FRAME_BYTES);
+}
+
+void m17_end_marker(uint8_t frame[M17_FRAME_BYTES])
+{
+	for (unsigned i = 0; i < M17_FRAME_BYTES; i += 2) {
+		frame[i] = 0x55;
+		frame[i + 1] = 0x5D;
+	}
+}
+
 static unsigned interleave(unsigned bit)
 {
 	return (45u * bit + 92u * bit * bit) % (BODY_BYTES * 8u);

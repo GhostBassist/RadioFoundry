@@ -29,6 +29,8 @@ typedef struct {
 } m17_packet_chunk_t;
 
 uint16_t m17_crc(const uint8_t *data, size_t len);
+void m17_preamble(uint8_t frame[M17_FRAME_BYTES]);
+void m17_end_marker(uint8_t frame[M17_FRAME_BYTES]);
 
 // A complete aligned frame in air order, including the sync burst.
 void m17_link_encode(const uint8_t data[M17_LINK_DATA_BYTES], uint8_t frame[M17_FRAME_BYTES]);
