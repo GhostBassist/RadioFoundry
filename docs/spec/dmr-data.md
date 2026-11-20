@@ -629,7 +629,7 @@ explicit IP destination optional) (`debuglink.md` 3.12; `rfoundry_debug.py data 
 
 A confirmed v2 SMS on a dedicated Hytera downlink is acknowledged to the packet-data gateway.
 The receiver validates the addressed envelope, decodes its UTF-16 text and stores it under the original sender ID.
-The debug IP view shows the last dedicated packet's SAP, length and up to 48 leading octets.
+The debug IP view shows the last addressed clear confirmed packet's SAP, length, source, trunked flag and up to 48 leading octets.
 
 ### 12.6 Our transmissions: the TX queue, chaining and the guard
 

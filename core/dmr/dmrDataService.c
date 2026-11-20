@@ -2471,6 +2471,17 @@ static void handlePacket(const dmrDataPacket_t *packet)
 	bool confirmed = (packet->dpf == DMR_DPF_CONFIRMED) && !packet->group;
 
 	stats.rxPackets++;
+#if CONFIG_DEBUGLINK
+	if (confirmed && forUs && !packet->privacy.encrypted)
+	{
+		stats.hyteraRxLength = packet->length;
+		stats.hyteraRxSap = packet->sap;
+		stats.hyteraRxSource = packet->src;
+		stats.hyteraRxTrunked = channel.trunked;
+		unsigned prefix = packet->length < sizeof(stats.hyteraRxPrefix) ? packet->length : sizeof(stats.hyteraRxPrefix);
+		memcpy(stats.hyteraRxPrefix, packet->data, prefix);
+	}
+#endif
 	// Confirmed data to us must be acknowledged, whatever it carries, or the sender keeps retrying
 	pendingReply_t reply = {
 			.queuedAt = now,
@@ -2628,12 +2639,6 @@ static void handlePacket(const dmrDataPacket_t *packet)
 	// The link ACK still addresses the gateway. The inbox identifies the sender from the envelope.
 	if (CONFIG_DMR_SMS && channel.trunked && confirmed && packet->src == T3_HYTERA_DT_CHECK_ID)
 	{
-#if CONFIG_DEBUGLINK
-		stats.hyteraRxLength = packet->length;
-		stats.hyteraRxSap = packet->sap;
-		unsigned prefix = packet->length < sizeof(stats.hyteraRxPrefix) ? packet->length : sizeof(stats.hyteraRxPrefix);
-		memcpy(stats.hyteraRxPrefix, packet->data, prefix);
-#endif
 		if (!toPc && packet->sap == DMR_SAP_PROPRIETARY &&
 		    hyteraV2SmsDecode(packet, &messageSrc, tms.text, sizeof(tms.text)))
 		{
