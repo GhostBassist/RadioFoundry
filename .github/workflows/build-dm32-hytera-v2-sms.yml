@@ -13,13 +13,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: a29acbf4283c413de6a204867b898a7b15d26c8c
+          ref: 71212dbfaa8634582c6918124f060fe094a5ecb6
           persist-credentials: false
           submodules: recursive
       - name: Build and identify firmware
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = a29acbf4283c413de6a204867b898a7b15d26c8c
+          test "$(git rev-parse HEAD)" = 71212dbfaa8634582c6918124f060fe094a5ecb6
           make -C tests/host run-t3access dmrDataTest dmrDataServiceTest
           tests/host/dmrDataTest > /tmp/dmrDataTest.log || { tail -n 50 /tmp/dmrDataTest.log; exit 1; }
           tail -n 1 /tmp/dmrDataTest.log
@@ -30,6 +30,6 @@ jobs:
           tools/docker/csky-toolchain/run.sh make -j2 BOARD=dm32 CONFIG_DMR_TRUNK_TX=n BUILD=build/dm32-no-trunk-tx
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: dm32-hytera-dedicated-v2-a29acbf4
+          name: dm32-hytera-dedicated-v2-71212dbf
           path: build/dm32/rfoundry_dm32.bin
           if-no-files-found: error
