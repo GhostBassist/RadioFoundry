@@ -19,6 +19,8 @@ bool m17_address_decode(const uint8_t address[M17_ADDRESS_BYTES], char callsign[
 // Build the link data for a clear packet. A NULL destination selects broadcast.
 bool m17_packet_link(const char *source, const char *destination, uint8_t can,
 	uint8_t link[M17_LINK_DATA_BYTES]);
+bool m17_voice_link(const char *source, const char *destination, uint8_t can,
+	uint8_t link[M17_LINK_DATA_BYTES]);
 uint8_t m17_link_can(const uint8_t link[M17_LINK_DATA_BYTES]);
 
 #endif

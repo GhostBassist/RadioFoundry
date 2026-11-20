@@ -4,6 +4,7 @@
 #include "m17/m17_frame.h"
 #include "m17/m17_packet.h"
 #include "m17/m17_engine.h"
+#include "m17/m17_voice.h"
 
 #include <assert.h>
 #include <string.h>
@@ -243,8 +244,69 @@ static void link_addresses(void)
 	assert(link[12] == 7 && link[13] == 0x80 && m17_link_can(link) == 15);
 }
 
+static void stream_frame(void)
+{
+	const uint8_t vector[M17_FRAME_BYTES] = {
+	0xFF, 0x5D, 0x4E, 0xED, 0xCE, 0x03, 0xCB, 0x36,
+	0x3F, 0xCE, 0x40, 0xDE, 0x50, 0xE0, 0x8E, 0x96,
+	0xF5, 0xD3, 0xB9, 0xC7, 0x30, 0xFF, 0xE2, 0xE2,
+	0x14, 0xF8, 0x72, 0xEA, 0x33, 0x07, 0x92, 0x06,
+	0x45, 0xAC, 0xD1, 0x12, 0x32, 0x61, 0xE6, 0x8D,
+	0x49, 0x4A, 0x30, 0xE4, 0x2C, 0x4D, 0xFD, 0xC9,
+	};
+	m17_stream_frame_t tx = { .number = M17_STREAM_FINAL | 0x123, .lich_index = 5,
+		.lich = { 0xAB, 0x12, 0xC3, 0x45, 0x5F } };
+	for (unsigned i = 0; i < M17_STREAM_BYTES; i++)
+		tx.data[i] = (uint8_t)(0xB0 + i);
+	uint8_t frame[M17_FRAME_BYTES];
+	assert(m17_stream_encode(&tx, frame) == 0);
+	assert(memcmp(frame, vector, sizeof(frame)) == 0);
+	m17_stream_frame_t rx;
+	assert(m17_stream_decode(vector, &rx) == 0);
+	assert(rx.lich_index == tx.lich_index && rx.number == tx.number);
+	assert(memcmp(rx.lich, tx.lich, sizeof(tx.lich)) == 0);
+	assert(memcmp(rx.data, tx.data, sizeof(tx.data)) == 0);
+	// The first four Golay bits occupy interleaver positions 0, 137, 90 and 227.
+	frame[2] ^= 0x80;
+	assert(m17_stream_decode(frame, &rx) == 0 && rx.lich_index == tx.lich_index);
+	frame[19] ^= 0x40;
+	frame[13] ^= 0x20;
+	frame[30] ^= 0x10;
+	assert(m17_stream_decode(frame, &rx) == 0 && rx.lich_index == M17_LICH_INVALID);
+	assert(memcmp(rx.data, tx.data, sizeof(tx.data)) == 0);
+	tx.lich_index = 6;
+	assert(m17_stream_encode(&tx, frame) == -1);
+	assert(m17_stream_decode(packet_vector, &rx) == -1);
+}
+
+static void voice_stream(void)
+{
+	m17_voice_tx_t tx;
+	uint8_t frame[M17_FRAME_BYTES];
+	uint8_t speech[M17_STREAM_BYTES] = { 0x12, 0x34 };
+	assert(m17_voice_tx_start(&tx, "AB1CD", NULL, 6, frame));
+	uint8_t link[M17_LINK_DATA_BYTES + 2];
+	assert(m17_link_decode(frame, link) == 0);
+	assert(m17_link_can(link) == 6 && (link[13] & 0x7F) == 5);
+	uint16_t crc = m17_crc(link, M17_LINK_DATA_BYTES);
+	link[M17_LINK_DATA_BYTES] = (uint8_t)(crc >> 8);
+	link[M17_LINK_DATA_BYTES + 1] = (uint8_t)crc;
+	for (unsigned i = 0; i <= 6; i++) {
+		m17_stream_frame_t rx;
+		assert(m17_voice_tx_frame(&tx, speech, i == 6, frame));
+		assert(m17_stream_decode(frame, &rx) == 0);
+		assert(rx.lich_index == i % 6);
+		assert(memcmp(rx.lich, link + rx.lich_index * M17_LICH_BYTES, M17_LICH_BYTES) == 0);
+		assert(rx.number == (i | (i == 6 ? M17_STREAM_FINAL : 0u)));
+		assert(memcmp(rx.data, speech, sizeof(speech)) == 0);
+	}
+	assert(!m17_voice_tx_frame(&tx, speech, false, frame));
+}
+
 int main(void)
 {
+	voice_stream();
+	stream_frame();
 	link_addresses();
 	transmit_burst();
 	receive_burst(false, M17_CAN_ANY);

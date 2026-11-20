@@ -72,3 +72,12 @@ uint8_t m17_link_can(const uint8_t link[M17_LINK_DATA_BYTES])
 {
 	return (uint8_t)(((link[12] << 1) | (link[13] >> 7)) & M17_CAN_MAX);
 }
+
+bool m17_voice_link(const char *source, const char *destination, uint8_t can,
+	uint8_t link[M17_LINK_DATA_BYTES])
+{
+	if (!m17_packet_link(source, destination, can, link))
+		return false;
+	link[13] |= 0x05u;	// stream mode, Codec 2 3200 voice only
+	return true;
+}
