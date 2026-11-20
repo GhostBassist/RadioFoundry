@@ -3148,6 +3148,14 @@ static void test_hytera_data_terminal_check(void)
 	rx(&ms, 1, &normal);
 	frames(&ms, 1);
 	CHECK(nsent == 2 && sent_act[1].burst[3] == 0x88u, "leave the reserved bit clear on a standard reply");
+	nsent = 0;
+	CHECK(sent_rand(&ms) && sent[0].u.rand.dst == T3_HYTERA_DT_CHECK_ID &&
+	      sent[0].u.rand.kind == T3_SK_IND_DATA && sent[0].u.rand.options == 0,
+	      "request the dedicated downlink after the terminal acceptance");
+	t3_csbk_t downlink = grant(T3_OP_PD_GRANT, 999, 2, OWN, T3_HYTERA_DT_CHECK_ID);
+	rx(&ms, 1, &downlink);
+	CHECK(ms.state == T3_FOLLOW && ms.call.data && !ms.call.ours && ms.ax.result == T3_RES_GRANTED,
+	      "follow the download grant as the recipient");
 }
 
 int main(void)

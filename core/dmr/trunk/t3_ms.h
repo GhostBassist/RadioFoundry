@@ -462,6 +462,7 @@ typedef struct {
 		uint8_t slot;
 		bool payload;
 		bool then_return;	// back to the TSCC once sent
+		bool request_pddi;	// request the dedicated downlink after the terminal ACK
 		bool udt;		// burst is a UDT header with up[] as its nblocks blocks (the short data upload)
 		uint8_t nblocks;
 		uint8_t burst[T3_CSBK_BYTES];

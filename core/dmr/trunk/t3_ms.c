@@ -470,7 +470,10 @@ static void on_grant(t3_ms_t *ms, uint32_t now, const t3_csbk_t *p, const t3_cha
 	}
 	const bool answered = ms->ax.state != T3_AX_IDLE && ms->ax.answering && p->op == T3_OP_PV_GRANT &&
 	                      p->u.grant.src == ms->ax.dst && is_me(ms, p->u.grant.dst);
-	if (ms->ax.state != T3_AX_IDLE && !answered && !is_me(ms, p->u.grant.src) && !p->u.grant.emergency) {
+	const bool download = ms->ax.state != T3_AX_IDLE && ms->ax.svc == T3_SVC_PDATA &&
+	                      ms->ax.dst == T3_HYTERA_DT_CHECK_ID && p->op == T3_OP_PD_GRANT &&
+	                      p->u.grant.src == ms->ax.dst && is_me(ms, p->u.grant.dst);
+	if (ms->ax.state != T3_AX_IDLE && !answered && !download && !is_me(ms, p->u.grant.src) && !p->u.grant.emergency) {
 		// Asking for a service: someone else's call doesn't take the radio off the TSCC meanwhile
 		return;
 	}
@@ -498,7 +501,7 @@ static void on_grant(t3_ms_t *ms, uint32_t now, const t3_csbk_t *p, const t3_cha
 	}
 	ms->ring_src = 0;
 	follow(ms, now, p, &c, group);
-	if (answered || (ms->call.ours && ms->ax.state != T3_AX_IDLE &&
+	if (answered || download || (ms->call.ours && ms->ax.state != T3_AX_IDLE &&
 	    (ms->call.data ? ms->ax.svc == T3_SVC_PDATA : is_voice(ms->ax.svc)))) {
 		finish(ms, now, T3_RES_GRANTED);
 	} else if (ms->ax.state != T3_AX_IDLE) {
@@ -1061,6 +1064,7 @@ static void answer_info(t3_ms_t *ms, uint8_t slot, bool payload, uint8_t reason,
 	ms->tx.count = 1;
 	ms->tx.slot = slot;
 	ms->tx.payload = payload;
+	ms->tx.request_pddi = false;
 	ms->tx.then_return = then_return;
 	ms->tx.udt = false;
 }
@@ -1116,6 +1120,7 @@ static void queue_udt(t3_ms_t *ms, uint32_t now, uint8_t slot, t3_udt_t *u, cons
 	ms->tx.count = 1;
 	ms->tx.slot = slot;
 	ms->tx.payload = false;
+	ms->tx.request_pddi = false;
 	ms->tx.then_return = false;
 	ms->tx.udt = true;
 	ms->tx.nblocks = u->blocks;
@@ -1444,6 +1449,7 @@ static void challenge_tscc(t3_ms_t *ms, uint32_t now, uint8_t slot, uint8_t what
 	ms->tx.count = 1;
 	ms->tx.slot = slot;
 	ms->tx.payload = false;
+	ms->tx.request_pddi = false;
 	ms->tx.then_return = false;
 	ms->tx.udt = false;
 }
@@ -1922,6 +1928,7 @@ static void on_tscc(t3_ms_t *ms, uint32_t now, uint8_t slot, uint8_t cc, const t
 				ps_wake(ms, now);
 				// The native terminal reply carries Response Info 1 with the reserved bit clear.
 				answer_info(ms, slot, false, T3_RC_MS_ACCEPTED, 1u, p->u.ahoy.src, false);
+				ms->tx.request_pddi = true;
 			}
 			return;
 		}
@@ -2454,6 +2461,12 @@ void t3_ms_slot(t3_ms_t *ms, uint32_t now, uint8_t slot, bool at_known, bool at_
 		}
 		if (--ms->tx.count == 0 && ms->tx.then_return && ms->state == T3_FOLLOW) {
 			return_to_tscc(ms, now);
+		} else if (ms->tx.request_pddi) {
+			ms->tx.request_pddi = false;
+			// The gateway schedules the pending download on a separate C_RAND after the ACK.
+			if (t3_ms_pdata(ms, now, T3_HYTERA_DT_CHECK_ID, false)) {
+				ms->ax.supl = false;
+			}
 		}
 		return;
 	}
@@ -2890,6 +2903,7 @@ void t3_ms_end_call(t3_ms_t *ms, uint32_t now)
 		ms->tx.count = T3_N_MAINT;
 		ms->tx.slot = ms->call.slot;
 		ms->tx.payload = true;
+		ms->tx.request_pddi = false;
 		ms->tx.then_return = true;
 		ms->tx.udt = false;
 		return;
