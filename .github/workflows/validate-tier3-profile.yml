@@ -12,14 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 7411f53bb286add7b76587a57457e4d86aa12c41
+          ref: d6a07bc79d1eb5da7cc6f22e5140b21d706ebb3c
           persist-credentials: false
       - name: Host and editor tests
         run: |
           set -euo pipefail
           make -C tests/host -j3 t3AccessTest t3PduTest t3CodeplugTest dmrDataTest dmrDataServiceTest dmrDataServiceTestNoTms radioCoreTest
           for t in t3AccessTest t3PduTest t3CodeplugTest dmrDataTest dmrDataServiceTest dmrDataServiceTestNoTms radioCoreTest; do
-            tests/host/"$t" > "/tmp/$t.log" || { tail -n 60 "/tmp/$t.log"; exit 1; }
+            (cd tests/host && ./"$t") > "/tmp/$t.log" || { tail -n 60 "/tmp/$t.log"; exit 1; }
             tail -n 1 "/tmp/$t.log"
           done
           node --test site/tests/modes.test.mjs site/tests/editor.test.mjs
@@ -32,7 +32,7 @@ jobs:
       fail-fast: false
       matrix:
         board: [dm1701, dm32]
-        target: [7411f53bb286add7b76587a57457e4d86aa12c41, afb378b388d44e28f0383165f3e17827f7bdaff7]
+        target: [d6a07bc79d1eb5da7cc6f22e5140b21d706ebb3c, afb378b388d44e28f0383165f3e17827f7bdaff7]
         include:
           - board: dm1701
             toolchain: arm
@@ -60,14 +60,14 @@ jobs:
           }
           build
           $RUN_WITH make BOARD="$BOARD_ID" size stack-check
-          if [[ "${{ matrix.target }}" == 7411f53bb286add7b76587a57457e4d86aa12c41 ]]; then
+          if [[ "${{ matrix.target }}" == d6a07bc79d1eb5da7cc6f22e5140b21d706ebb3c ]]; then
             build CONFIG_DMR_TRUNK_DEDICATED_DATA=n BUILD=build/profile-off
             build CONFIG_DMR_TRUNK_TX=n BUILD=build/trunk-tx-off
             build CONFIG_DMR_TRUNK=n BUILD=build/trunk-off
           fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        if: matrix.board == 'dm32' && matrix.target == '7411f53bb286add7b76587a57457e4d86aa12c41'
+        if: matrix.board == 'dm32' && matrix.target == 'd6a07bc79d1eb5da7cc6f22e5140b21d706ebb3c'
         with:
-          name: dm32-tier3-profile-7411f53b
+          name: dm32-tier3-profile-d6a07bc7
           path: build/dm32/rfoundry_dm32.bin
           if-no-files-found: error
