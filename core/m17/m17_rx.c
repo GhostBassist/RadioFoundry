@@ -85,18 +85,9 @@ void m17_rx_init(m17_rx_t *rx,
 	rx->packet.active = 0;
 	rx->received = received;
 	rx->ctx = ctx;
-	air_framer_init(&rx->framer, &m17_packet_air_mode, rx, rx->hard, NULL, M17_FRAME_SYMBOLS);
 }
 
 void m17_rx_reset(m17_rx_t *rx)
 {
 	rx_lost(rx);
-	air_framer_rx_reset(&rx->framer);
-}
-
-void m17_rx_feed(m17_rx_t *rx, const air_chunk_t *chunk)
-{
-	if (chunk->flags & AIR_CHUNK_GAP)
-		rx->packet.active = 0;
-	air_framer_rx(&rx->framer, chunk);
 }

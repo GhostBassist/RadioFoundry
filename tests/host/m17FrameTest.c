@@ -3,7 +3,7 @@
 
 #include "m17/m17_frame.h"
 #include "m17/m17_packet.h"
-#include "m17/m17_rx.h"
+#include "m17/m17_engine.h"
 
 #include <assert.h>
 #include <string.h>
@@ -104,6 +104,89 @@ static void received(const uint8_t *link, const uint8_t *data, size_t len, void 
 	++*(unsigned *)ctx;
 }
 
+static air_event_cb_t on_air;
+static void *air_ctx;
+static uint32_t fit_flags;
+static air_tx_chunk_t queued;
+static bool pending;
+
+static uint32_t fit(const air_profile_t *profile)
+{
+	assert(profile->sym_rate == 4800 && profile->shape_param == 50);
+	return fit_flags;
+}
+
+static bool open_air(const air_profile_t *profile, air_event_cb_t cb, void *ctx)
+{
+	(void)profile;
+	on_air = cb;
+	air_ctx = ctx;
+	pending = false;
+	return true;
+}
+
+static bool queue_air(const air_tx_chunk_t *chunk)
+{
+	if (pending)
+		return false;
+	queued = *chunk;
+	pending = true;
+	return true;
+}
+
+static uint8_t space_air(void)
+{
+	return pending ? 0 : 1;
+}
+
+static bool begin_air(void)
+{
+	return pending;
+}
+
+static void end_air(void)
+{
+	assert(pending);
+	queued.flags |= AIR_TX_LAST;
+}
+
+static const hal_air_t provider = {
+	.fit = fit, .open = open_air, .tx_queue = queue_air, .tx_begin = begin_air,
+	.tx_space = space_air, .tx_end = end_air, .tx_queue_depth = 1, .tx_chunk_syms = 80,
+};
+
+static void transmit_burst(void)
+{
+	const uint8_t payload[] = { 1 };
+	const uint8_t link[M17_LINK_DATA_BYTES] = { 0 };
+	m17_engine_t engine;
+	fit_flags = AIR_FIT_RX | AIR_FIT_TX | AIR_FIT_SHAPE_APPROX;
+	assert(m17_engine_open(&engine, &provider, NULL, NULL));
+	assert(!m17_engine_prepare(&engine, link, payload, sizeof(payload)));
+	fit_flags = AIR_FIT_RX | AIR_FIT_TX;
+	assert(m17_engine_open(&engine, &provider, NULL, NULL));
+	assert(m17_engine_prepare(&engine, link, payload, sizeof(payload)));
+	assert(air_session_tx_prime(&engine.session));
+	assert(air_session_tx_go(&engine.session));
+
+	m17_packet_burst_t expected;
+	uint8_t wire[4 * M17_FRAME_BYTES];
+	assert(m17_packet_burst_begin(&expected, link, payload, sizeof(payload)) == 0);
+	for (unsigned i = 0; i < 4; i++)
+		assert(m17_packet_burst_next(&expected, wire + i * M17_FRAME_BYTES) == 1);
+	unsigned bytes = 0;
+	while (pending) {
+		assert(bytes + queued.nsyms / 4 <= sizeof(wire));
+		assert(memcmp(queued.syms, wire + bytes, queued.nsyms / 4) == 0);
+		bytes += queued.nsyms / 4;
+		const air_event_t event = { .kind = (queued.flags & AIR_TX_LAST) ? AIR_EV_TX_DONE : AIR_EV_TX_SPACE };
+		pending = false;
+		on_air(&event, air_ctx);
+	}
+	assert(bytes == sizeof(wire));
+	assert(air_session_tx_state(&engine.session) == AIR_TX_DONE);
+}
+
 static void receive_burst(bool gap)
 {
 	uint8_t data[24];
@@ -117,9 +200,10 @@ static void receive_burst(bool gap)
 		assert(m17_packet_burst_next(&burst, wire + i * M17_FRAME_BYTES) == 1);
 	// Damage one sync symbol. The framer can still identify the packet sync.
 	wire[2 * M17_FRAME_BYTES] ^= 0x40;
-	m17_rx_t rx;
+	m17_engine_t engine;
 	unsigned deliveries = 0;
-	m17_rx_init(&rx, received, &deliveries);
+	fit_flags = AIR_FIT_RX;
+	assert(m17_engine_open(&engine, &provider, received, &deliveries));
 	for (unsigned offset = 0; offset < sizeof(wire); offset += 23) {
 		unsigned bytes = sizeof(wire) - offset;
 		if (bytes > 23)
@@ -131,13 +215,15 @@ static void receive_burst(bool gap)
 			.flags = gap && offset == 115 ? AIR_CHUNK_GAP : 0,
 			.hard = wire + offset,
 		};
-		m17_rx_feed(&rx, &chunk);
+		const air_event_t event = { .kind = AIR_EV_RX, .chunk = &chunk };
+		on_air(&event, air_ctx);
 	}
 	assert(deliveries == (gap ? 0u : 1u));
 }
 
 int main(void)
 {
+	transmit_burst();
 	receive_burst(false);
 	receive_burst(true);
 	packet_burst();
