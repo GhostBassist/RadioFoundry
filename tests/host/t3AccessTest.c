@@ -2320,7 +2320,7 @@ static void test_hytera_pdui_grant(void)
 	CHECK(t3_ms_data_ready(&ms, T), "dedicated uplink can start data TX after tuning");
 	nsent = 0;
 	t3_ms_data_done(&ms, T, true);
-	frames(&ms, 6);
+	poll_all(&ms);
 	const uint8_t complete[] = { 0xAAu, 0x00u, 0x30u, 0x10u, 0xFFu, 0xFDu, 0x02u,
 				     OWN >> 16, (OWN >> 8) & 0xFFu, OWN & 0xFFu };
 	CHECK(nsent == 1 && sent_act[0].payload && sent_act[0].slot == 2 &&

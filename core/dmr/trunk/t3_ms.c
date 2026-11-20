@@ -457,13 +457,19 @@ static void hytera_data_maint(t3_ms_t *ms, bool downlink)
 		0x80u | T3_OP_P_MAINT, downlink ? T3_FID_HYTERA_DT_CHECK : 0u, 0x30u, downlink ? 0x1Au : 0x10u,
 		dst >> 16, (dst >> 8) & 0xFFu, dst & 0xFFu, id >> 16, id >> 8, id,
 	};
+	t3_crc_append(maint, T3_CRC_MASK_CSBK);
+	if (!downlink) {
+		// The slot is already granted. Let the modem align this burst without waiting for
+		// another protocol slot callback while the recipient starts access.
+		send(ms, maint, ms->call.slot, true);
+		return;
+	}
 	memcpy(ms->tx.burst, maint, sizeof(maint));
-	t3_crc_append(ms->tx.burst, T3_CRC_MASK_CSBK);
 	ms->tx.count = 1;
 	ms->tx.slot = ms->call.slot;
 	ms->tx.payload = true;
 	ms->tx.request_pddi = false;
-	ms->tx.then_return = !downlink;
+	ms->tx.then_return = false;
 	ms->tx.udt = false;
 }
 
@@ -2916,6 +2922,7 @@ void t3_ms_data_done(t3_ms_t *ms, uint32_t now, bool ok)
 		// The site clears the upload when it hears completion addressed to the dedicated gateway.
 		ms->data_end_ms = 0;
 		hytera_data_maint(ms, false);
+		return_to_tscc(ms, now);
 		return;
 	}
 	if (!ok) {
