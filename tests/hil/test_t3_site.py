@@ -500,7 +500,8 @@ def test_t3_pdata_pair(radio, pytestconfig):
             text = f"Tier III IP SMS {uuid4().hex[:8]} 0123456789 ABCDEFGHIJKLMNOPQ"
             first = num(receiver.view(["dmr_data_stats"]), "data.responses_sent")
             sender.link.sms(dst, text, ack=True, fmt="etsi_ip")
-            deadline = time.monotonic() + 100
+            started = time.monotonic()
+            deadline = started + 100
             while time.monotonic() < deadline:
                 try:
                     message = receiver.link.inbox()
@@ -514,8 +515,19 @@ def test_t3_pdata_pair(radio, pytestconfig):
             else:
                 raise AssertionError(f"{src} to {dst} did not reach the inbox with a queued response. "
                                      f"Sender: {t3(sender)}. Receiver: {t3(receiver)}")
-            for r in (sender, receiver):
-                wait_t3(r, lambda view: view.get("t3.state") == "camped", CLEAR_S, "back on the control channel")
+            print(f"{src} to {dst}: exact inbox text and queued response in {time.monotonic() - started:.2f} s")
+            deadline = time.monotonic() + CLEAR_S
+            while time.monotonic() < deadline:
+                try:
+                    views = [t3(r) for r in (sender, receiver)]
+                    if all(v["t3.state"] == "camped" and v["t3.ax_state"] == "idle"
+                           and not 0 <= num(v, "t3.last_tx_age_ms") < 1000 for v in views):
+                        break
+                except DebugLinkError:
+                    pass
+                time.sleep(0.2)
+            else:
+                raise AssertionError("the radios did not settle on the control channel after delivery")
     finally:
         try:
             peer.tx_gate_end()
