@@ -51,6 +51,9 @@ Pass criteria:
   data service sends PDATA_TEXT as an IP text message to --t3-peer. Within PDATA_S the engine asks for a data channel
   (t3.ax_svc pdata seen), the message is sent (data.sms_state ok; confirmed: the peer acknowledged its blocks) and the radio
   is back on the control channel within CLEAR_S.
+- test_t3_pdata_pair (radio_tx; needs --peer-port, --t3-rx-mhz and --t3-tx-mhz): both radios already
+  registered on the same site. Each receives the other's exact long IP text and queues its confirmed data response
+  within 100 seconds.
 - test_t3_reg_list (radio_tx; needs --t3-tg-list): registration by talkgroup with --t3-tg and --t3-tg-list
   (two to seven in all) listened to: within REG_S t3.reg ok, t3.ax_reason 0x62 or 0x65, t3_svc t3.reg_tgs the
   number sent, and t3.reg_tg_ok has no bit set past them. Which the site accepted is printed; the site's own
@@ -86,11 +89,12 @@ codeplug as they found it: they refuse a slot, channel record or tag already the
 """
 import subprocess
 import time
+from uuid import uuid4
 
 import pytest
 
-from rfoundry_debug import VIEW_SECTIONS, as_int, DebugLink, CPKV_SYSTEM, CPKV_SYS_CHAN, CPKV_CH_TAG
-from rfoundry_hil import counter_deltas, skip
+from rfoundry_debug import VIEW_SECTIONS, as_int, DebugLink, DebugLinkError, CPKV_SYSTEM, CPKV_SYS_CHAN, CPKV_CH_TAG
+from rfoundry_hil import Radio, counter_deltas, skip
 from hil_config import rig, tx_allowed
 
 # The debug link's names (docs/spec/debuglink.md, the t3 section); kept here so a rename touches one place
@@ -470,6 +474,53 @@ def test_t3_pdata(trunk_tx, pytestconfig, ack):
         print("data view:", radio.link.view(["dmr_data"]))
         raise
 
+
+@pytest.mark.feature("dmr_trunk_tx")
+@pytest.mark.second_radio
+@pytest.mark.radio_tx
+def test_t3_pdata_pair(radio, pytestconfig):
+    """Use two already registered radios. Each inbox must receive the exact text and original sender."""
+    peer_port = rig(pytestconfig, "peer-port", "a second registered radio")
+    rx_hz = round(rig(pytestconfig, "t3-rx-mhz", "the site's control channel") * 1e6)
+    tx_hz = round(rig(pytestconfig, "t3-tx-mhz", "the site's control channel") * 1e6)
+    peer = Radio(peer_port)
+    try:
+        views = [t3(r) for r in (radio, peer)]
+        for r, view in zip((radio, peer), views):
+            if view.get("t3.tx_built") != "1" or r.link.view(["dmr_data"]).get("data.built") != "1":
+                skip("not_built", "both radios need Tier III access and the DMR data service")
+            if (view.get("t3.state"), view.get("t3.reg"), view.get("t3.rx_hz"), view.get("t3.tx_hz")) != (
+                    "camped", "ok", str(rx_hz), str(tx_hz)):
+                skip("state", "both radios must be registered on the specified control channel")
+        assert views[0]["t3.syscode"] == views[1]["t3.syscode"], "radios are camped on different Tier III sites"
+        own, other = (num(view, "t3.own_id") for view in views)
+        assert own and other and own != other, "the radios need distinct nonzero subscriber IDs"
+        peer.tx_gate(True)
+        for sender, receiver, src, dst in ((radio, peer, own, other), (peer, radio, other, own)):
+            text = f"Tier III IP SMS {uuid4().hex[:8]} 0123456789 ABCDEFGHIJKLMNOPQ"
+            first = num(receiver.view(["dmr_data_stats"]), "data.responses_sent")
+            sender.link.sms(dst, text, ack=True, fmt="etsi_ip")
+            deadline = time.monotonic() + 100
+            while time.monotonic() < deadline:
+                try:
+                    message = receiver.link.inbox()
+                    responses = num(receiver.view(["dmr_data_stats"]), "data.responses_sent")
+                    if (message and (message["src"], message["dst"], message["text"]) == (src, dst, text)
+                            and responses > first):
+                        break
+                except DebugLinkError:
+                    pass  # a half-duplex serial link can be briefly unavailable while the radio transmits
+                time.sleep(0.2)
+            else:
+                raise AssertionError(f"{src} to {dst} did not reach the inbox with a queued response. "
+                                     f"Sender: {t3(sender)}. Receiver: {t3(receiver)}")
+            for r in (sender, receiver):
+                wait_t3(r, lambda view: view.get("t3.state") == "camped", CLEAR_S, "back on the control channel")
+    finally:
+        try:
+            peer.tx_gate_end()
+        finally:
+            peer.close()
 
 @pytest.mark.feature("dmr_trunk_tx")
 @pytest.mark.radio_tx
