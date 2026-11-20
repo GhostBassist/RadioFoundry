@@ -18,7 +18,8 @@ typedef struct {
 
 // The caller owns tuning, channel access, permission to key, and RF power.
 bool m17_engine_open(m17_engine_t *engine, const hal_air_t *air, uint8_t rx_can,
-	void (*received)(const uint8_t *link, const uint8_t *data, size_t len, void *ctx), void *ctx);
+	void (*received)(const uint8_t *link, const uint8_t *data, size_t len, void *ctx),
+	const m17_voice_rx_ops_t *voice, void *ctx);
 void m17_engine_retuned(m17_engine_t *engine);
 
 // Prepare a send while idle. The payload stays valid until the session signals TX done.

@@ -16,6 +16,26 @@ typedef struct {
 	bool active;
 } m17_voice_tx_t;
 
+typedef struct {
+	void (*start)(const uint8_t *link, bool late, void *ctx);
+	void (*speech)(const uint8_t *data, uint16_t number, void *ctx);
+	void (*end)(void *ctx);
+} m17_voice_rx_ops_t;
+
+typedef struct {
+	m17_voice_rx_ops_t ops;
+	void *ctx;
+	uint8_t fragments[M17_LINK_DATA_BYTES + 2];
+	uint16_t next_number;
+	uint8_t next_fragment, can;
+	bool active;
+} m17_voice_rx_t;
+
+void m17_voice_rx_init(m17_voice_rx_t *rx, uint8_t can, const m17_voice_rx_ops_t *ops, void *ctx);
+void m17_voice_rx_reset(m17_voice_rx_t *rx);
+void m17_voice_rx_link(m17_voice_rx_t *rx, const uint8_t link[M17_LINK_DATA_BYTES]);
+void m17_voice_rx_frame(m17_voice_rx_t *rx, const m17_stream_frame_t *frame);
+
 // Produce the initial link frame. The caller sends the preamble before it.
 bool m17_voice_tx_start(m17_voice_tx_t *tx, const char *source, const char *destination, uint8_t can,
 	uint8_t frame[M17_FRAME_BYTES]);

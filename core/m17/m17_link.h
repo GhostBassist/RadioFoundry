@@ -11,6 +11,7 @@
 #define M17_CALLSIGN_LEN 9
 #define M17_ADDRESS_BYTES 6
 #define M17_CAN_MAX 15
+#define M17_CAN_ANY 0xFFu
 
 // Standard base-40 callsigns. Lowercase input is normalized to uppercase.
 bool m17_address_encode(const char *callsign, uint8_t address[M17_ADDRESS_BYTES]);

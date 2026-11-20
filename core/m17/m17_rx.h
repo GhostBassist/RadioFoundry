@@ -7,23 +7,25 @@
 #include "air/air_framer.h"
 #include "m17_link.h"
 #include "m17_packet.h"
+#include "m17_voice.h"
 
 #define M17_FRAME_SYMBOLS (M17_FRAME_BYTES * 4)
-#define M17_CAN_ANY 0xFFu
 
 typedef struct {
 	m17_packet_rx_t packet;
+	m17_voice_rx_t voice;
 	uint8_t link[M17_LINK_DATA_BYTES];
 	uint8_t can;
 	void (*received)(const uint8_t *link, const uint8_t *data, size_t len, void *ctx);
 	void *ctx;
 } m17_rx_t;
 
-extern const air_mode_t m17_packet_air_mode;
+extern const air_mode_t m17_air_mode;
 
 // The packet and link buffers are valid during the callback.
 void m17_rx_init(m17_rx_t *rx, uint8_t can,
-	void (*received)(const uint8_t *link, const uint8_t *data, size_t len, void *ctx), void *ctx);
+	void (*received)(const uint8_t *link, const uint8_t *data, size_t len, void *ctx),
+	const m17_voice_rx_ops_t *voice, void *ctx);
 void m17_rx_reset(m17_rx_t *rx);
 
 #endif

@@ -163,10 +163,10 @@ static void transmit_burst(void)
 	assert(m17_packet_link("AB1CD", NULL, 9, link));
 	m17_engine_t engine;
 	fit_flags = AIR_FIT_RX | AIR_FIT_TX | AIR_FIT_SHAPE_APPROX;
-	assert(m17_engine_open(&engine, &provider, M17_CAN_ANY, NULL, NULL));
+	assert(m17_engine_open(&engine, &provider, M17_CAN_ANY, NULL, NULL, NULL));
 	assert(!m17_engine_prepare(&engine, "AB1CD", NULL, 9, payload, sizeof(payload)));
 	fit_flags = AIR_FIT_RX | AIR_FIT_TX;
-	assert(m17_engine_open(&engine, &provider, M17_CAN_ANY, NULL, NULL));
+	assert(m17_engine_open(&engine, &provider, M17_CAN_ANY, NULL, NULL, NULL));
 	assert(m17_engine_prepare(&engine, "AB1CD", NULL, 9, payload, sizeof(payload)));
 	assert(air_session_tx_prime(&engine.session));
 	assert(air_session_tx_go(&engine.session));
@@ -205,7 +205,7 @@ static void receive_burst(bool gap, uint8_t rx_can)
 	m17_engine_t engine;
 	unsigned deliveries = 0;
 	fit_flags = AIR_FIT_RX;
-	assert(m17_engine_open(&engine, &provider, rx_can, received, &deliveries));
+	assert(m17_engine_open(&engine, &provider, rx_can, received, NULL, &deliveries));
 	for (unsigned offset = 0; offset < sizeof(wire); offset += 23) {
 		unsigned bytes = sizeof(wire) - offset;
 		if (bytes > 23)
@@ -303,8 +303,74 @@ static void voice_stream(void)
 	assert(!m17_voice_tx_frame(&tx, speech, false, frame));
 }
 
+typedef struct {
+	unsigned starts, blocks, ends, next;
+	bool late;
+} voice_capture_t;
+
+static void voice_started(const uint8_t *link, bool late, void *ctx)
+{
+	voice_capture_t *capture = ctx;
+	assert(m17_link_can(link) == 6);
+	capture->starts++;
+	capture->late = late;
+	capture->next = late ? 5 : 0;
+}
+
+static void voice_speech(const uint8_t *data, uint16_t number, void *ctx)
+{
+	voice_capture_t *capture = ctx;
+	assert(number == capture->next++);
+	assert(data[0] == 42);
+	capture->blocks++;
+}
+
+static void voice_ended(void *ctx)
+{
+	((voice_capture_t *)ctx)->ends++;
+}
+
+static void receive_voice(bool late, uint8_t can, bool gap)
+{
+	static const m17_voice_rx_ops_t ops = { voice_started, voice_speech, voice_ended };
+	m17_engine_t engine;
+	voice_capture_t capture = { 0 };
+	fit_flags = AIR_FIT_RX;
+	assert(m17_engine_open(&engine, &provider, can, NULL, &ops, &capture));
+	m17_voice_tx_t tx;
+	uint8_t wire[9 * M17_FRAME_BYTES];
+	memset(wire, 0x77, M17_FRAME_BYTES);
+	assert(m17_voice_tx_start(&tx, "AB1CD", NULL, 6, wire + M17_FRAME_BYTES));
+	const uint8_t speech[M17_STREAM_BYTES] = { 42 };
+	for (unsigned i = 0; i < 7; i++)
+		assert(m17_voice_tx_frame(&tx, speech, i == 6, wire + (i + 2) * M17_FRAME_BYTES));
+
+	unsigned start = late ? 2 * M17_FRAME_BYTES : 0;
+	for (unsigned offset = start; offset < sizeof(wire); offset += 24) {
+		const air_chunk_t chunk = {
+			.t_us = offset * 4u * 1000000u / 4800u,
+			.nsyms = 96,
+			.sync_at = -1,
+			.hard = wire + offset,
+			.flags = gap && offset == 3 * M17_FRAME_BYTES ? AIR_CHUNK_GAP : 0,
+		};
+		const air_event_t event = { .kind = AIR_EV_RX, .chunk = &chunk };
+		on_air(&event, air_ctx);
+	}
+	if (can == 6) {
+		assert(capture.starts == 1 && capture.late == late && capture.ends == 1);
+		assert(capture.blocks == (late ? 2u : gap ? 1u : 7u));
+	} else {
+		assert(capture.starts == 0 && capture.blocks == 0 && capture.ends == 0);
+	}
+}
+
 int main(void)
 {
+	receive_voice(false, 6, false);
+	receive_voice(true, 6, false);
+	receive_voice(false, 5, false);
+	receive_voice(false, 6, true);
 	voice_stream();
 	stream_frame();
 	link_addresses();

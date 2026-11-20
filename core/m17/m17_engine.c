@@ -35,12 +35,13 @@ static void tx_done(void *ctx)
 static const air_session_ops_t ops = { .tx_fill = tx_fill, .tx_done = tx_done };
 
 bool m17_engine_open(m17_engine_t *engine, const hal_air_t *air, uint8_t rx_can,
-	void (*received)(const uint8_t *link, const uint8_t *data, size_t len, void *ctx), void *ctx)
+	void (*received)(const uint8_t *link, const uint8_t *data, size_t len, void *ctx),
+	const m17_voice_rx_ops_t *voice, void *ctx)
 {
 	engine->burst = (m17_packet_burst_t){ 0 };
 	engine->tx_pos = M17_FRAME_SYMBOLS;
-	m17_rx_init(&engine->rx, rx_can, received, ctx);
-	return air_session_open(&engine->session, air, &m17_packet_air_mode, &engine->rx, engine->rx_frame,
+	m17_rx_init(&engine->rx, rx_can, received, voice, ctx);
+	return air_session_open(&engine->session, air, &m17_air_mode, &engine->rx, engine->rx_frame,
 		NULL, M17_FRAME_SYMBOLS, &ops, engine);
 }
 
