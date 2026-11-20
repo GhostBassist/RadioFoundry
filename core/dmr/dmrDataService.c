@@ -2472,14 +2472,19 @@ static void handlePacket(const dmrDataPacket_t *packet)
 
 	stats.rxPackets++;
 #if CONFIG_DEBUGLINK
-	if (confirmed && forUs && !packet->privacy.encrypted)
+	if (confirmed && forUs)
 	{
+		stats.hyteraRxEvents++;
+		stats.hyteraRxEncrypted = packet->privacy.encrypted;
 		stats.hyteraRxLength = packet->length;
 		stats.hyteraRxSap = packet->sap;
 		stats.hyteraRxSource = packet->src;
 		stats.hyteraRxTrunked = channel.trunked;
 		unsigned prefix = packet->length < sizeof(stats.hyteraRxPrefix) ? packet->length : sizeof(stats.hyteraRxPrefix);
-		memcpy(stats.hyteraRxPrefix, packet->data, prefix);
+		if (!stats.hyteraRxEncrypted)
+		{
+			memcpy(stats.hyteraRxPrefix, packet->data, prefix);
+		}
 	}
 #endif
 	// Confirmed data to us must be acknowledged, whatever it carries, or the sender keeps retrying

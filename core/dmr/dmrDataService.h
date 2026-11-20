@@ -224,7 +224,9 @@ typedef struct
 	uint32_t rxNacksSent;					// NACKs (every block good, the CRC-32 not)
 	uint32_t rxConfirmedDuplicates;			// a packet again with the N(S) we last ACKed: ACKed, not passed on
 #if CONFIG_DEBUGLINK
+	uint32_t hyteraRxEvents;
 	uint32_t hyteraRxSource;
+	bool hyteraRxEncrypted;
 	bool hyteraRxTrunked;
 	uint16_t hyteraRxLength;
 	uint8_t hyteraRxSap;

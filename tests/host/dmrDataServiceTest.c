@@ -1508,6 +1508,33 @@ static void testHyteraDownlink(void)
 	      m.format == DMR_SMS_FORMAT_ETSI_IP && strcmp(m.text, "OK") == 0);
 	CHECK(sentCount == 1 && sent[0].kind == 'R' && sent[0].dst == T3_HYTERA_DT_CHECK_ID);
 
+	// The gateway uses the same link sequence for consecutive messages with different original senders.
+	const char *sample[] = {
+		"123456789012345678901234567890",
+		"IP FULL RX2 ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 abcdef",
+	};
+	for (unsigned i = 0; i < sizeof(sample) / sizeof(sample[0]); i++)
+	{
+		uint8_t envelope[152];
+		unsigned textLength = 2 * strlen(sample[i]);
+		memcpy(envelope, pdu, 40);
+		envelope[3] = 36 + textLength;
+		envelope[21] = (uint8_t)(RADIO_A + i);
+		envelope[39] = textLength;
+		for (unsigned j = 0; j < textLength / 2u; j++)
+		{
+			envelope[40 + 2u * j] = 0;
+			envelope[41 + 2u * j] = (uint8_t)sample[i][j];
+		}
+		count = dmrDataBuildHyteraConfirmed(OUR_ID, T3_HYTERA_DT_CHECK_ID, envelope, 40 + textLength,
+						    0, true, 0, 0, bursts, DMR_DATA_MAX_BURSTS);
+		CHECK(count > 0);
+		rxBursts(bursts, count);
+		runMainTask(300);
+		CHECK(sms_inbox_get(0, &m) && m.src == RADIO_A + i && strcmp(m.text, sample[i]) == 0);
+	}
+	CHECK(sentCount == 3 && sent[2].kind == 'R' && sent[2].dst == T3_HYTERA_DT_CHECK_ID);
+
 	int previous = sms_inbox_count();
 	pdu[29] ^= 1u;
 	count = dmrDataBuildHyteraConfirmed(OUR_ID, T3_HYTERA_DT_CHECK_ID, pdu, sizeof(pdu),
