@@ -510,6 +510,8 @@ on the TSCC).
 
 A Hytera dedicated packet-data terminal check (FID `0x68`, source `0xFFFD01`) gets C_ACKU Message_Accepted
 with Response Info 1 and the reserved bit clear, matching the native terminal reply captured on the site.
+A confirmed upload to the dedicated gateway ends its payload call as soon as it is acknowledged.
+The recipient uses a separate downlink grant, so the upload does not wait through the data linger.
 
 **To an IP gateway (multi-part, 6.6.3.2.3).** `t3_ms_pdata_ip` asks for packet data to an IPv4 address outside the
 radio network: the C_RAND targets IPI (0xFFFEC3) with the Proxy Flag 0 (IPv4).

@@ -2318,6 +2318,11 @@ static void test_hytera_pdui_grant(void)
 	CHECK(tuned.payload && tuned.slot == 2 && tuned.chan.tx_hz == 145000000u, "dedicated uplink tunes to slot 2");
 	frames(&ms, 3);
 	CHECK(t3_ms_data_ready(&ms, T), "dedicated uplink can start data TX after tuning");
+	nsent = 0;
+	t3_ms_data_done(&ms, T, true);
+	frames(&ms, 6);
+	CHECK(nsent == T3_N_MAINT && sent[0].op == T3_OP_P_MAINT && ms.state == T3_CAMPED,
+	      "release the dedicated uplink before the normal data linger");
 }
 
 // Packet data (6.6.3): the radio asks for a data channel and follows PD_GRANT / TD_GRANT; to it, the TSCC checks it is

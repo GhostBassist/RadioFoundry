@@ -2856,9 +2856,10 @@ void t3_ms_data_done(t3_ms_t *ms, uint32_t now, bool ok)
 	if (ms->state != T3_FOLLOW || !ms->call.data || !ms->call.ours) {
 		return;
 	}
-	if (!ok) {
+	if (!ok || ms->call.dst == T3_ID_HYTERA_PDUI) {
+		// A dedicated upload's reply comes on a separate downlink. Free the slot for that grant.
 		ms->data_end_ms = 0;
-		t3_ms_end_call(ms, now);	// 6.6.3.3.2.5 e: retries spent without an ACK
+		t3_ms_end_call(ms, now);
 		return;
 	}
 	ms->data_end_ms = (now + T3_DATA_LINGER_MS) | 1u;	// 6.6.3.3.2.5 a, c
