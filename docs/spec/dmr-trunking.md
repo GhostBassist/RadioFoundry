@@ -512,6 +512,7 @@ A Hytera dedicated packet-data terminal check (FID `0x68`, source `0xFFFD01`) ge
 with Response Info 1 and the reserved bit clear, matching the native terminal reply captured on the site.
 After that reply, the radio requests individual packet data from the dedicated downlink gateway.
 A grant addressed to the radio from that gateway completes the request and is followed as a receive call.
+A System Busy response from the gateway is retried after two and then four seconds within the same access deadline.
 A confirmed upload to the dedicated gateway ends its payload call as soon as it is acknowledged.
 The recipient uses a separate downlink grant, so the upload does not wait through the data linger.
 

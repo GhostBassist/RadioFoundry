@@ -3152,6 +3152,12 @@ static void test_hytera_data_terminal_check(void)
 	CHECK(sent_rand(&ms) && sent[0].u.rand.dst == T3_HYTERA_DT_CHECK_ID &&
 	      sent[0].u.rand.kind == T3_SK_IND_DATA && sent[0].u.rand.options == 0,
 	      "request the dedicated downlink after the terminal acceptance");
+	t3_csbk_t busy = ack(T3_OP_C_ACKD, T3_RC_SYS_BUSY, OWN, T3_HYTERA_DT_CHECK_ID);
+	rx(&ms, 1, &busy);
+	nsent = 0;
+	frames(&ms, 30);
+	CHECK(nsent == 0 && ms.ax.state == T3_AX_WAIT_SLOT, "let the prior slot clear after System Busy");
+	CHECK(sent_rand(&ms) && sent[0].u.rand.dst == T3_HYTERA_DT_CHECK_ID, "retry the dedicated downlink");
 	t3_csbk_t downlink = grant(T3_OP_PD_GRANT, 999, 2, OWN, T3_HYTERA_DT_CHECK_ID);
 	rx(&ms, 1, &downlink);
 	CHECK(ms.state == T3_FOLLOW && ms.call.data && !ms.call.ours && ms.ax.result == T3_RES_GRANTED,

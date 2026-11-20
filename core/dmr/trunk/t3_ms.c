@@ -1009,6 +1009,15 @@ static void on_ack(t3_ms_t *ms, uint32_t now, const t3_ack_t *a)
 		finish(ms, now, T3_RES_DONE);
 		break;
 	case T3_NACK:
+		if (svc == T3_SVC_PDATA && ms->ax.dst == T3_HYTERA_DT_CHECK_ID && a->src == ms->ax.dst &&
+		    a->reason == T3_RC_SYS_BUSY && ms->ax.tries < 3u) {
+			// The single payload slot can still be clearing the upload when the download is requested.
+			// Retry after two, then four seconds, inside the original TRand_TC access deadline.
+			ms->ax.state = T3_AX_WAIT_SLOT;
+			ms->ax.frames = 34u * ms->ax.tries;
+			ms->ax.to_air = false;
+			break;
+		}
 		if (svc == T3_SVC_REGISTER && a->reason == T3_RC_REG_DENIED) {
 			// Barred from this area until the engine restarts; find another TSCC (6.4.4.1)
 			uint16_t area = reg_area(ms, ms->syscode);
