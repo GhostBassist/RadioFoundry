@@ -1513,6 +1513,8 @@ static void testHyteraDownlink(void)
 		"123456789012345678901234567890",
 		"IP FULL RX2 ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 abcdef",
 	};
+	// Header CRCs for the fixture IDs after the repeater clears F and blocks-to-follow.
+	const uint8_t airCrc[][2] = {{0xC3, 0x0E}, {0x05, 0x69}};
 	for (unsigned i = 0; i < sizeof(sample) / sizeof(sample[0]); i++)
 	{
 		uint8_t envelope[152];
@@ -1529,7 +1531,18 @@ static void testHyteraDownlink(void)
 		count = dmrDataBuildHyteraConfirmed(OUR_ID, T3_HYTERA_DT_CHECK_ID, envelope, 40 + textLength,
 						    0, true, 0, 0, bursts, DMR_DATA_MAX_BURSTS);
 		CHECK(count > 0);
-		rxBursts(bursts, count);
+		bursts[0].payload[8] = 0;
+		bursts[0].payload[9] |= 0x80u; // the captured downlink sets the resynchronization bit
+		memcpy(&bursts[0].payload[10], airCrc[i], sizeof(airCrc[i]));
+		CHECK(dmrDataCheckCRC16(bursts[0].payload, 0xCC));
+		int replies = sentCount;
+		rxBursts(bursts, 2);
+		runMainTask(10);
+		CHECK(sentCount == replies);
+		rxBursts(bursts + 2, count - 3);
+		runMainTask(10);
+		CHECK(sentCount == replies);
+		rxBursts(bursts + count - 1, 1);
 		runMainTask(300);
 		CHECK(sms_inbox_get(0, &m) && m.src == RADIO_A + i && strcmp(m.text, sample[i]) == 0);
 	}

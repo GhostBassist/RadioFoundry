@@ -6,6 +6,7 @@
 
 #include <string.h>
 #include "dmr/dmrData.h"
+#include "dmr/trunk/t3_pdu.h"
 
 // Motorola CAI network: individual IDs are 12.x.y.z, groups 225.x.y.z
 #define CAI_NETWORK_INDIVIDUAL		0x0C
@@ -1419,6 +1420,7 @@ static struct
 {
 	bool held;
 	bool retry;							// this transmission is a selective retry of the held packet
+	bool inferLength;					// dedicated downlink header left its block count zero
 	bool unmatched;						// F clear but nothing held to match: a retry of a packet we lost
 	uint32_t src, dst;
 	uint8_t sap, ns, total, padOctets, dataType;
@@ -1506,11 +1508,35 @@ static dmrDataRxResult_t confirmedFinish(dmrDataPacket_t *p)
 	return DMR_DATA_RX_RETRY;
 }
 
+// The repeater can clear F and the block count on a dedicated v2 downlink. Once its second
+// header is heard, the envelope length and original pad count recover the number of data blocks.
+static bool confirmedInferLength(dmrDataPacket_t *p, const dmrBurst_t *burst, int dataLen)
+{
+	const uint8_t *data = &burst->payload[2];
+	if (rxBlocksReceived != 1 || dataLen < 6 || (burst->payload[0] >> 1) != 0 ||
+	    data[0] != 0x02u || data[1] != 0x01u || data[4] != 0x68u || data[5] != 0x07u)
+	{
+		return false;
+	}
+	int length = 4 + ((data[2] << 8) | data[3]);
+	int blocks = dmrDataConfirmedBlocks(length, burst->dataType);
+	if (length < 42 || blocks <= 0 || blocks * dataLen > DMR_DATA_MAX_PACKET ||
+	    blocks * dataLen - 4 - length != cnf.padOctets)
+	{
+		return false;
+	}
+	cnf.total = blocks;
+	p->blocksToFollow = blocks + 1;
+	cnf.inferLength = false;
+	return true;
+}
+
 static dmrDataRxResult_t confirmedBlock(dmrDataPacket_t *p, const dmrBurst_t *burst)
 {
 	int dataLen = burst->length - 2;
 
-	if ((dataLen <= 0) || (dataLen != dmrDataConfirmedBlockData(burst->dataType)) || (cnf.total == 0) ||
+	if ((dataLen <= 0) || (dataLen != dmrDataConfirmedBlockData(burst->dataType)) ||
+			(cnf.inferLength && !confirmedInferLength(p, burst, dataLen)) || (cnf.total == 0) ||
 			(cnf.total > DMR_CONFIRMED_MAX_BLOCKS) || ((cnf.total * dataLen) > DMR_DATA_MAX_PACKET) ||
 			(cnf.filled && (burst->dataType != cnf.dataType)))
 	{
@@ -1569,6 +1595,11 @@ dmrDataRxResult_t dmrDataRxConfirmedEnd(void)
 		return DMR_DATA_RX_NONE;
 	}
 	rxCollecting = false;
+	if (cnf.inferLength)
+	{
+		cnf.held = false;
+		return DMR_DATA_RX_NONE;
+	}
 	return (cnf.dataType != 0) ? confirmedFinish(&dmrDataRxPacket) : DMR_DATA_RX_RETRY;
 }
 
@@ -1659,6 +1690,13 @@ dmrDataRxResult_t dmrDataRxBurst(const dmrBurst_t *burst)
 					cnf.held = false;
 					return DMR_DATA_RX_ERROR;
 				}
+				if (cnf.inferLength && p->dpf == DMR_DPF_CONFIRMED &&
+				    (burst->payload[0] != 0x9Fu || burst->payload[1] != T3_FID_HYTERA_DT_CHECK))
+				{
+					rxCollecting = false;
+					cnf.held = false;
+					return DMR_DATA_RX_ERROR;
+				}
 				parsePrivacyHeader(crcOk ? burst->payload : NULL, &ph);
 				if (ph.present && (p->sap == DMR_SAP_PROPRIETARY) && (ph.sap != DMR_SAP_PROPRIETARY))
 				{
@@ -1679,7 +1717,7 @@ dmrDataRxResult_t dmrDataRxBurst(const dmrBurst_t *burst)
 				{
 					cnf.total--;// the second header is one of the blocks to follow
 				}
-				if (++rxBlocksReceived >= p->blocksToFollow)
+				if (++rxBlocksReceived >= p->blocksToFollow && p->blocksToFollow != 0)
 				{
 					rxCollecting = false;
 				}
@@ -1699,14 +1737,21 @@ dmrDataRxResult_t dmrDataRxBurst(const dmrBurst_t *burst)
 				confirmedTrace.emptyHeaders += p->blocksToFollow == 0;
 			}
 #endif
-			if (p->blocksToFollow == 0)
+			bool inferLength = p->blocksToFollow == 0 && p->dpf == DMR_DPF_CONFIRMED &&
+					   p->sap == DMR_SAP_PROPRIETARY && !p->group && p->src == T3_HYTERA_DT_CHECK_ID;
+			if (p->blocksToFollow == 0 && !inferLength)
 			{
 				p->dataType = DMR_TYPE_DATA_HEADER;
 				return DMR_DATA_RX_PACKET;
 			}
 			if (p->dpf == DMR_DPF_CONFIRMED)
 			{
+				if (inferLength)
+				{
+					cnf.held = false; // the gateway sends all blocks even with F clear
+				}
 				confirmedHeader(p);
+				cnf.inferLength = inferLength;
 			}
 			else
 			{

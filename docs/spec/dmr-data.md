@@ -629,6 +629,7 @@ explicit IP destination optional) (`debuglink.md` 3.12; `rfoundry_debug.py data 
 
 A confirmed v2 SMS on a dedicated Hytera downlink is acknowledged to the packet-data gateway.
 The receiver validates the addressed envelope, decodes its UTF-16 text and stores it under the original sender ID.
+If the repeater clears the confirmed header block count, the receiver uses the v2 envelope length and the header pad count after it sees the proprietary second header. It checks the full packet CRC-32 before acknowledging the message.
 The debug IP view shows the last addressed clear confirmed packet's SAP, length, source, trunked flag and up to 48 leading octets.
 
 ### 12.6 Our transmissions: the TX queue, chaining and the guard
