@@ -1486,6 +1486,38 @@ static void testIpAddresses(void)
 // Confirmed data to us: a bad block asked for again with a selective ACK, the retry completes the packet (passed on
 // once), the same packet again is ACKed but not passed on; lost bursts asked for after CNF_RX_STALL_MS; a CRC-32
 // failure with good blocks NACKed
+static void testHyteraDownlink(void)
+{
+	reset();
+	ch.trunked = true;
+	dmrBurst_t bursts[DMR_DATA_MAX_BURSTS];
+	uint8_t pdu[] = {
+		0x02, 0x01, 0, 0x28, 0x68, 0x07, 0, 1, 0, 4, 0, 0, 0, 0x11,
+		0, 2, 0, 4, 0, RADIO_A >> 16, (RADIO_A >> 8) & 0xFF, RADIO_A & 0xFF,
+		0, 3, 0, 4, 0, OUR_ID >> 16, (OUR_ID >> 8) & 0xFF, OUR_ID & 0xFF,
+		1, 1, 0, 2, 0, 7, 1, 2, 0, 4, 0, 'O', 0, 'K',
+	};
+	int count = dmrDataBuildHyteraConfirmed(OUR_ID, T3_HYTERA_DT_CHECK_ID, pdu, sizeof(pdu),
+					       0, true, 0, 0, bursts, DMR_DATA_MAX_BURSTS);
+	CHECK(count > 0);
+	rxBursts(bursts, count);
+	runMainTask(300);
+	dmrDataMessage_t m;
+	CHECK(sms_inbox_get(0, &m) && m.src == RADIO_A && m.dst == OUR_ID &&
+	      m.format == DMR_SMS_FORMAT_ETSI_IP && strcmp(m.text, "OK") == 0);
+	CHECK(sentCount == 1 && sent[0].kind == 'R' && sent[0].dst == T3_HYTERA_DT_CHECK_ID);
+
+	int previous = sms_inbox_count();
+	pdu[29] ^= 1u;
+	count = dmrDataBuildHyteraConfirmed(OUR_ID, T3_HYTERA_DT_CHECK_ID, pdu, sizeof(pdu),
+					    1, true, 0, 0, bursts, DMR_DATA_MAX_BURSTS);
+	CHECK(count > 0);
+	rxBursts(bursts, count);
+	runMainTask(300);
+	CHECK(sms_inbox_count() == previous);
+	ch.trunked = false;
+}
+
 static void testConfirmedRx(void)
 {
 	dmrBurst_t b[DMR_DATA_MAX_BURSTS];
@@ -2611,6 +2643,7 @@ int main(void)
 	testIpAddresses();
 	testConfirmedRx();
 	testIpText();
+	testHyteraDownlink();
 	testNmeaPosition();
 	testNotForUsIsolation();
 	testPassthrough();

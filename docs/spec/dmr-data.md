@@ -627,6 +627,10 @@ ip.rx_duplicates ip.rx_crc9_mismatch`. DMR_DATA ops 9 IP_SETTINGS (the gateway I
 explicit IP destination optional) (`debuglink.md` 3.12; `rfoundry_debug.py data ip-settings ... gateway=ID`,
 `data ip-send ID@A.B.C.D ...`).
 
+A confirmed v2 SMS on a dedicated Hytera downlink is acknowledged to the packet-data gateway.
+The receiver validates the addressed envelope, decodes its UTF-16 text and stores it under the original sender ID.
+The debug IP view shows the last dedicated packet's SAP, length and up to 48 leading octets.
+
 ### 12.6 Our transmissions: the TX queue, chaining and the guard
 
 `core/dmr/dmrAirQueue.c` (`CONFIG_DMR_AIR_QUEUE`, built with the IP gateway or zone sharing). It replaced the

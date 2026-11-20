@@ -223,6 +223,11 @@ typedef struct
 	uint32_t rxSacksSent;					// selective ACKs asking for bad or lost blocks
 	uint32_t rxNacksSent;					// NACKs (every block good, the CRC-32 not)
 	uint32_t rxConfirmedDuplicates;			// a packet again with the N(S) we last ACKed: ACKed, not passed on
+#if CONFIG_DEBUGLINK
+	uint16_t hyteraRxLength;
+	uint8_t hyteraRxSap;
+	uint8_t hyteraRxPrefix[48];	// a dedicated received envelope for protocol debugging
+#endif
 } dmrDataStats_t;
 
 // --- The host's calls (the radio task) ---

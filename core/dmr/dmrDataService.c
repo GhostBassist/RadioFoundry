@@ -672,6 +672,36 @@ static int hyteraV2SmsPayload(const uint8_t *udp, int udpLength, uint32_t src, u
 	return length;
 }
 
+// Decode the v2 envelope that the dedicated gateway returns, including the original sender.
+static bool hyteraV2SmsDecode(const dmrDataPacket_t *p, uint32_t *src, char *text, int textSize)
+{
+	const uint8_t *data = p->data;
+	if (p->length < 42 || data[0] != 0x02u || data[1] != 0x01u || data[4] != 0x68u || data[5] != 0x07u ||
+	    ((data[2] << 8) | data[3]) != p->length - 4)
+	{
+		return false;
+	}
+	static const uint8_t idTag[] = {0, 1, 0, 4};
+	static const uint8_t senderTag[] = {0, 2, 0, 4, 0};
+	static const uint8_t recipientTag[] = {0, 3, 0, 4, 0};
+	static const uint8_t textTags[] = {1, 1, 0, 2, 0, 7, 1, 2};
+	if (memcmp(data + 6, idTag, sizeof(idTag)) || memcmp(data + 14, senderTag, sizeof(senderTag)) ||
+	    memcmp(data + 22, recipientTag, sizeof(recipientTag)) || memcmp(data + 30, textTags, sizeof(textTags)))
+	{
+		return false;
+	}
+	int length = (data[38] << 8) | data[39];
+	uint32_t sender = ((uint32_t)data[19] << 16) | ((uint32_t)data[20] << 8) | data[21];
+	uint32_t recipient = ((uint32_t)data[27] << 16) | ((uint32_t)data[28] << 8) | data[29];
+	if (length != p->length - 40 || (length & 1) || recipient != p->dst ||
+	    sender == 0 || sender > T3_ID_USER_MAX || !dmrDataDecodeIPText(data + 40, length, text, textSize))
+	{
+		return false;
+	}
+	*src = sender;
+	return true;
+}
+
 static void ipTransmit(void)
 {
 	const uint8_t *pdu;
@@ -2578,6 +2608,7 @@ static void handlePacket(const dmrDataPacket_t *packet)
 	bool isTMS = false;
 #endif
 	uint8_t format = DMR_SMS_FORMAT_TMS;
+	uint32_t messageSrc = packet->src;
 
 	if (toPc && !(isTMS && tms.isAck))
 	{
@@ -2592,6 +2623,26 @@ static void handlePacket(const dmrDataPacket_t *packet)
 		stats.smsAcked++;
 		smsFinish(DMR_REQ_OK);
 		return;
+	}
+
+	// The link ACK still addresses the gateway. The inbox identifies the sender from the envelope.
+	if (CONFIG_DMR_SMS && channel.trunked && confirmed && packet->src == T3_HYTERA_DT_CHECK_ID)
+	{
+#if CONFIG_DEBUGLINK
+		stats.hyteraRxLength = packet->length;
+		stats.hyteraRxSap = packet->sap;
+		unsigned prefix = packet->length < sizeof(stats.hyteraRxPrefix) ? packet->length : sizeof(stats.hyteraRxPrefix);
+		memcpy(stats.hyteraRxPrefix, packet->data, prefix);
+#endif
+		if (!toPc && packet->sap == DMR_SAP_PROPRIETARY &&
+		    hyteraV2SmsDecode(packet, &messageSrc, tms.text, sizeof(tms.text)))
+		{
+			isTMS = true;
+			format = DMR_SMS_FORMAT_ETSI_IP;
+			tms.isAck = false;
+			tms.ackRequested = false;
+			tms.seq = 0;
+		}
 	}
 
 	// ETSI IP text (TS 102 361-3 5.7.1, UDP 5016): into the inbox; no acknowledgment of its own (confirmed data got
@@ -2655,7 +2706,7 @@ static void handlePacket(const dmrDataPacket_t *packet)
 	{
 		const dmrDataMessage_t *m = dmrDataServiceMessage(i);
 
-		if ((m->src == packet->src) && (m->dst == packet->dst) && (m->group == packet->group) &&
+		if ((m->src == messageSrc) && (m->dst == packet->dst) && (m->group == packet->group) &&
 				(m->format == format) &&
 				((now - m->receivedAt) < DUPLICATE_MESSAGE_MS) && (strcmp(m->text, tms.text) == 0))
 		{
@@ -2664,7 +2715,7 @@ static void handlePacket(const dmrDataPacket_t *packet)
 		}
 	}
 
-	inboxStore(packet->src, packet->dst, packet->group, tms.seq, format, tms.text);
+	inboxStore(messageSrc, packet->dst, packet->group, tms.seq, format, tms.text);
 	stats.etsiSmsReceived += (format == DMR_SMS_FORMAT_ETSI) ? 1 : 0;
 	stats.ipTextReceived += (format == DMR_SMS_FORMAT_ETSI_IP) ? 1 : 0;
 }

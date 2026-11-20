@@ -82,6 +82,14 @@ static void ip_section(const dmrDataStats_t *s, const dmrDataSettings_t *set, dl
 	dl_text(t, "ip.rx_sacks_sent=%u\nip.rx_nacks_sent=%u\nip.rx_duplicates=%u\nip.rx_crc9_mismatch=%u\n",
 		(unsigned)s->rxSacksSent, (unsigned)s->rxNacksSent, (unsigned)s->rxConfirmedDuplicates,
 		(unsigned)dmrDataRxCrc9Mismatches());
+	if (s->hyteraRxLength != 0) {
+		dl_text(t, "ip.dedicated_rx=%u,%u\nip.dedicated_prefix=", (unsigned)s->hyteraRxSap, (unsigned)s->hyteraRxLength);
+		unsigned n = s->hyteraRxLength < sizeof(s->hyteraRxPrefix) ? s->hyteraRxLength : sizeof(s->hyteraRxPrefix);
+		for (unsigned i = 0; i < n; i++) {
+			dl_text(t, "%02x", (unsigned)s->hyteraRxPrefix[i]);
+		}
+		dl_text(t, "\n");
+	}
 }
 
 void debuglink_view_dmr_data(uint8_t part, dl_text_t *t)
