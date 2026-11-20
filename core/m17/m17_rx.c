@@ -36,7 +36,8 @@ static void rx_frame(const air_frame_t *frame, void *ctx)
 		packed[0] = 0x55;
 		packed[1] = 0xF7;
 		rx->packet.active = 0;
-		if (m17_link_decode(packed, rx->link) >= 0 && !(rx->link[13] & 1u))
+		if (m17_link_decode(packed, rx->link) >= 0 && !(rx->link[13] & 1u) &&
+		    (rx->can == M17_CAN_ANY || rx->can == m17_link_can(rx->link)))
 			m17_packet_rx_begin(&rx->packet);
 		return;
 	}
@@ -79,10 +80,11 @@ const air_mode_t m17_packet_air_mode = {
 	.rx_lost = rx_lost,
 };
 
-void m17_rx_init(m17_rx_t *rx,
+void m17_rx_init(m17_rx_t *rx, uint8_t can,
 	void (*received)(const uint8_t *link, const uint8_t *data, size_t len, void *ctx), void *ctx)
 {
 	rx->packet.active = 0;
+	rx->can = can;
 	rx->received = received;
 	rx->ctx = ctx;
 }

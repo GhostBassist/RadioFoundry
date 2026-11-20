@@ -158,14 +158,15 @@ static const hal_air_t provider = {
 static void transmit_burst(void)
 {
 	const uint8_t payload[] = { 1 };
-	const uint8_t link[M17_LINK_DATA_BYTES] = { 0 };
+	uint8_t link[M17_LINK_DATA_BYTES];
+	assert(m17_packet_link("AB1CD", NULL, 9, link));
 	m17_engine_t engine;
 	fit_flags = AIR_FIT_RX | AIR_FIT_TX | AIR_FIT_SHAPE_APPROX;
-	assert(m17_engine_open(&engine, &provider, NULL, NULL));
-	assert(!m17_engine_prepare(&engine, link, payload, sizeof(payload)));
+	assert(m17_engine_open(&engine, &provider, M17_CAN_ANY, NULL, NULL));
+	assert(!m17_engine_prepare(&engine, "AB1CD", NULL, 9, payload, sizeof(payload)));
 	fit_flags = AIR_FIT_RX | AIR_FIT_TX;
-	assert(m17_engine_open(&engine, &provider, NULL, NULL));
-	assert(m17_engine_prepare(&engine, link, payload, sizeof(payload)));
+	assert(m17_engine_open(&engine, &provider, M17_CAN_ANY, NULL, NULL));
+	assert(m17_engine_prepare(&engine, "AB1CD", NULL, 9, payload, sizeof(payload)));
 	assert(air_session_tx_prime(&engine.session));
 	assert(air_session_tx_go(&engine.session));
 
@@ -187,7 +188,7 @@ static void transmit_burst(void)
 	assert(air_session_tx_state(&engine.session) == AIR_TX_DONE);
 }
 
-static void receive_burst(bool gap)
+static void receive_burst(bool gap, uint8_t rx_can)
 {
 	uint8_t data[24];
 	for (unsigned i = 0; i < sizeof(data); i++)
@@ -203,7 +204,7 @@ static void receive_burst(bool gap)
 	m17_engine_t engine;
 	unsigned deliveries = 0;
 	fit_flags = AIR_FIT_RX;
-	assert(m17_engine_open(&engine, &provider, received, &deliveries));
+	assert(m17_engine_open(&engine, &provider, rx_can, received, &deliveries));
 	for (unsigned offset = 0; offset < sizeof(wire); offset += 23) {
 		unsigned bytes = sizeof(wire) - offset;
 		if (bytes > 23)
@@ -218,14 +219,38 @@ static void receive_burst(bool gap)
 		const air_event_t event = { .kind = AIR_EV_RX, .chunk = &chunk };
 		on_air(&event, air_ctx);
 	}
-	assert(deliveries == (gap ? 0u : 1u));
+	assert(deliveries == (!gap && (rx_can == 0 || rx_can == M17_CAN_ANY) ? 1u : 0u));
+}
+
+static void link_addresses(void)
+{
+	const uint8_t ab1cd[M17_ADDRESS_BYTES] = { 0, 0, 0, 0x9F, 0xDD, 0x51 };
+	uint8_t address[M17_ADDRESS_BYTES];
+	char callsign[M17_CALLSIGN_LEN + 1];
+	assert(m17_address_encode("ab1cd ", address) && memcmp(address, ab1cd, sizeof(address)) == 0);
+	assert(m17_address_decode(address, callsign) && strcmp(callsign, "AB1CD") == 0);
+	assert(m17_address_encode(".........", address));
+	assert(m17_address_decode(address, callsign) && strcmp(callsign, ".........") == 0);
+	assert(!m17_address_encode("          ", address));
+	assert(!m17_address_encode(" ", address));
+	assert(!m17_address_encode("AB?CD", address));
+	uint8_t link[M17_LINK_DATA_BYTES];
+	assert(!m17_packet_link(NULL, "AB1CD", 0, link));
+	assert(!m17_packet_link("AB1CD", NULL, 16, link));
+	assert(m17_packet_link("AB1CD", NULL, 15, link));
+	assert(!m17_address_decode(link, callsign));
+	assert(memcmp(link + M17_ADDRESS_BYTES, ab1cd, sizeof(ab1cd)) == 0);
+	assert(link[12] == 7 && link[13] == 0x80 && m17_link_can(link) == 15);
 }
 
 int main(void)
 {
+	link_addresses();
 	transmit_burst();
-	receive_burst(false);
-	receive_burst(true);
+	receive_burst(false, M17_CAN_ANY);
+	receive_burst(false, 0);
+	receive_burst(false, 1);
+	receive_burst(true, M17_CAN_ANY);
 	packet_burst();
 	packet_round_trip(1);
 	packet_round_trip(23);

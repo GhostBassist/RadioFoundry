@@ -34,12 +34,12 @@ static void tx_done(void *ctx)
 
 static const air_session_ops_t ops = { .tx_fill = tx_fill, .tx_done = tx_done };
 
-bool m17_engine_open(m17_engine_t *engine, const hal_air_t *air,
+bool m17_engine_open(m17_engine_t *engine, const hal_air_t *air, uint8_t rx_can,
 	void (*received)(const uint8_t *link, const uint8_t *data, size_t len, void *ctx), void *ctx)
 {
 	engine->burst = (m17_packet_burst_t){ 0 };
 	engine->tx_pos = M17_FRAME_SYMBOLS;
-	m17_rx_init(&engine->rx, received, ctx);
+	m17_rx_init(&engine->rx, rx_can, received, ctx);
 	return air_session_open(&engine->session, air, &m17_packet_air_mode, &engine->rx, engine->rx_frame,
 		NULL, M17_FRAME_SYMBOLS, &ops, engine);
 }
@@ -50,7 +50,7 @@ void m17_engine_retuned(m17_engine_t *engine)
 	air_session_retuned(&engine->session);
 }
 
-bool m17_engine_prepare(m17_engine_t *engine, const uint8_t link[M17_LINK_DATA_BYTES],
+bool m17_engine_prepare(m17_engine_t *engine, const char *source, const char *destination, uint8_t can,
 	const uint8_t *data, size_t len)
 {
 	const air_session_t *session = &engine->session;
@@ -60,5 +60,8 @@ bool m17_engine_prepare(m17_engine_t *engine, const uint8_t link[M17_LINK_DATA_B
 	if ((session->fit & (AIR_FIT_TX | AIR_FIT_SHAPE_APPROX | AIR_FIT_DEV_APPROX)) != AIR_FIT_TX)
 		return false;
 	engine->tx_pos = M17_FRAME_SYMBOLS;
-	return m17_packet_burst_begin(&engine->burst, link, data, len) == 0;
+	engine->burst = (m17_packet_burst_t){ 0 };
+	uint8_t link[M17_LINK_DATA_BYTES];
+	return m17_packet_link(source, destination, can, link) &&
+	       m17_packet_burst_begin(&engine->burst, link, data, len) == 0;
 }
