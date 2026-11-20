@@ -13,13 +13,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: fa454b5fca3791abc29d5a56e28ec783c8f60740
+          ref: eafa9cc62380dc81f72b5f76b89464b2bf55be2a
           persist-credentials: false
           submodules: recursive
       - name: Build and identify firmware
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = fa454b5fca3791abc29d5a56e28ec783c8f60740
+          test "$(git rev-parse HEAD)" = eafa9cc62380dc81f72b5f76b89464b2bf55be2a
           make -C tests/host run-t3access dmrDataTest dmrDataServiceTest
           tests/host/dmrDataTest > /tmp/dmrDataTest.log || { tail -n 50 /tmp/dmrDataTest.log; exit 1; }
           tail -n 1 /tmp/dmrDataTest.log
@@ -31,7 +31,7 @@ jobs:
           tools/docker/csky-toolchain/run.sh csky-elf-objdump -dr build/dm32/core/dmr/dmrDataService.o > build/dm32/dmrDataService.dis
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: dm32-hytera-dedicated-v2-fa454b5f
+          name: dm32-hytera-dedicated-v2-eafa9cc6
           path: |
             build/dm32/rfoundry_dm32.bin
             build/dm32/dmrData.dis
