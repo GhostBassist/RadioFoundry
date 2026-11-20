@@ -750,6 +750,7 @@ static void start_access(t3_ms_t *ms, uint32_t now, t3_svc_t svc, uint32_t dst, 
 	ms->ax.frames = 0;
 	ms->ax.to_air = false;
 	ms->ax.tries = 0;
+	ms->ax.busy_retries = 0;
 	ms->ax.tc_deadline = now + T3_TRAND_TC_MS;
 	ms->ax.ack_deadline = 0;
 	ms->ax.result = T3_RES_PENDING;
@@ -1032,11 +1033,12 @@ static void on_ack(t3_ms_t *ms, uint32_t now, const t3_ack_t *a)
 		break;
 	case T3_NACK:
 		if (svc == T3_SVC_PDATA && ms->ax.dst == T3_HYTERA_DT_CHECK_ID && a->src == ms->ax.dst &&
-		    a->reason == T3_RC_SYS_BUSY && ms->ax.tries < 3u) {
+		    a->reason == T3_RC_SYS_BUSY && ms->ax.busy_retries < 2u) {
 			// The single payload slot can still be clearing the upload when the download is requested.
 			// Retry after two, then four seconds, inside the original TRand_TC access deadline.
 			ms->ax.state = T3_AX_WAIT_SLOT;
-			ms->ax.frames = 34u * ms->ax.tries;
+			ms->ax.frames = 34u * ++ms->ax.busy_retries;
+			ms->ax.tries = 0; // the site replied, so start a new random access sequence
 			ms->ax.to_air = false;
 			break;
 		}

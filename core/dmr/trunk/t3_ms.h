@@ -373,6 +373,7 @@ typedef struct {
 		uint16_t frames;	// WAIT_SLOT: frames to the chosen one; WAIT_RESP: frames left to wait
 		bool to_air;		// the last try is with the radio, not yet reported on air (t3_ms_sent)
 		uint8_t tries;
+		uint8_t busy_retries;	// dedicated downlink: retries after explicit System Busy
 		uint32_t tc_deadline;	// TRand_TC
 		uint32_t ack_deadline;	// TP_Timer / TNP_Timer
 		t3_res_t result;
