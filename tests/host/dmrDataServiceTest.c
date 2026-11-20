@@ -1490,6 +1490,7 @@ static void testHyteraDownlink(void)
 {
 	reset();
 	ch.trunked = true;
+	runMainTask(10);
 	dmrBurst_t bursts[DMR_DATA_MAX_BURSTS];
 	uint8_t pdu[] = {
 		0x02, 0x01, 0, 0x28, 0x68, 0x07, 0, 1, 0, 4, 0, 0, 0, 0x11,
