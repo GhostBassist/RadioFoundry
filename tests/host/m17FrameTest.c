@@ -1,0 +1,141 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The RadioFoundry Authors
+
+#include "m17/m17_frame.h"
+#include "m17/m17_packet.h"
+
+#include <assert.h>
+#include <string.h>
+
+// Generated from the published bit ordering and FEC independently of the C codec.
+static const uint8_t link_vector[M17_FRAME_BYTES] = {
+	0x55, 0xF7, 0xD6, 0xB5, 0xE2, 0xB0, 0x82, 0xFF,
+	0x85, 0x62, 0xBB, 0x4E, 0x96, 0x90, 0xD8, 0x98,
+	0xDD, 0x7D, 0x0C, 0xC8, 0x52, 0x43, 0xD1, 0x1D,
+	0xF8, 0x6E, 0x68, 0x2F, 0x3D, 0xDA, 0x14, 0xEA,
+	0xDD, 0x66, 0x19, 0x8D, 0xD5, 0x82, 0xD1, 0x33,
+	0x87, 0x13, 0x57, 0x18, 0x29, 0x29, 0x78, 0xC3,
+};
+
+static const uint8_t packet_vector[M17_FRAME_BYTES] = {
+	0x75, 0xFF, 0xD6, 0x34, 0xE2, 0x31, 0x82, 0xFF,
+	0x84, 0x63, 0xBA, 0x4E, 0xB6, 0x90, 0xF8, 0x98,
+	0xDD, 0x5D, 0x0C, 0xC8, 0x52, 0x0B, 0x99, 0x15,
+	0xF8, 0x66, 0x60, 0x3F, 0x35, 0xDA, 0x14, 0xFA,
+	0xDF, 0x76, 0x19, 0x8F, 0xD5, 0x80, 0xD3, 0x33,
+	0x83, 0x13, 0x53, 0x18, 0x2D, 0x29, 0xF8, 0x43,
+};
+
+static void packet_round_trip(size_t len)
+{
+	uint8_t payload[M17_PACKET_MAX_BYTES];
+	for (size_t i = 0; i < len; i++)
+		payload[i] = (uint8_t)i;
+	m17_packet_tx_t tx;
+	m17_packet_rx_t rx;
+	m17_packet_chunk_t chunk, decoded;
+	uint8_t frame[M17_FRAME_BYTES];
+	assert(m17_packet_tx_begin(&tx, payload, len) == 0);
+	m17_packet_rx_begin(&rx);
+	unsigned count = 0;
+	while (m17_packet_tx_next(&tx, &chunk)) {
+		assert(m17_packet_encode(&chunk, frame) == 0);
+		assert(m17_packet_decode(frame, &decoded) == 0);
+		assert(m17_packet_rx_push(&rx, &decoded) == chunk.final);
+		count++;
+	}
+	assert(count == (len + 26) / 25);
+	assert(!rx.active && rx.len == len);
+	assert(memcmp(payload, rx.data, len) == 0);
+	assert(m17_packet_rx_push(&rx, &decoded) == -1);
+}
+
+static void packet_rejects_errors(void)
+{
+	const uint8_t payload[24] = { 1 };
+	m17_packet_tx_t tx;
+	m17_packet_rx_t rx;
+	m17_packet_chunk_t chunk;
+	assert(m17_packet_tx_begin(&tx, payload, 0) == -1);
+	assert(m17_packet_tx_next(&tx, &chunk) == 0);
+	assert(m17_packet_tx_begin(&tx, payload, sizeof(payload)) == 0);
+	assert(m17_packet_tx_next(&tx, &chunk) == 1);
+	m17_packet_rx_begin(&rx);
+	chunk.counter = 1;
+	assert(m17_packet_rx_push(&rx, &chunk) == -1 && !rx.active);
+	chunk.counter = 0;
+	m17_packet_rx_begin(&rx);
+	assert(m17_packet_rx_push(&rx, &chunk) == 0);
+	assert(m17_packet_tx_next(&tx, &chunk) == 1);
+	chunk.data[0] ^= 1;
+	assert(m17_packet_rx_push(&rx, &chunk) == -1 && !rx.active && rx.len == 0);
+}
+
+static void packet_burst(void)
+{
+	m17_packet_burst_t burst;
+	uint8_t link[M17_LINK_DATA_BYTES] = { 0 };
+	const uint8_t payload[] = { 1 };
+	uint8_t frame[M17_FRAME_BYTES];
+	assert(m17_packet_burst_begin(&burst, link, payload, sizeof(payload)) == 0);
+	assert(m17_packet_burst_next(&burst, frame) == 1);
+	for (unsigned i = 0; i < sizeof(frame); i++)
+		assert(frame[i] == 0x77);
+	assert(m17_packet_burst_next(&burst, frame) == 1);
+	assert(memcmp(frame, link_vector, sizeof(frame)) == 0);
+	assert(m17_packet_burst_next(&burst, frame) == 1);
+	m17_packet_chunk_t chunk;
+	assert(m17_packet_decode(frame, &chunk) == 0 && chunk.final && chunk.counter == 3);
+	assert(m17_packet_burst_next(&burst, frame) == 1);
+	for (unsigned i = 0; i < sizeof(frame); i += 2)
+		assert(frame[i] == 0x55 && frame[i + 1] == 0x5D);
+	assert(m17_packet_burst_next(&burst, frame) == 0);
+	link[13] = 1;
+	assert(m17_packet_burst_begin(&burst, link, payload, sizeof(payload)) == -1);
+	assert(m17_packet_burst_next(&burst, frame) == 0);
+}
+
+int main(void)
+{
+	packet_burst();
+	packet_round_trip(1);
+	packet_round_trip(23);
+	packet_round_trip(24);
+	packet_round_trip(25);
+	packet_round_trip(M17_PACKET_MAX_BYTES);
+	packet_rejects_errors();
+	assert(m17_crc(NULL, 0) == 0xFFFF);
+	assert(m17_crc((const uint8_t *)"A", 1) == 0x206E);
+	assert(m17_crc((const uint8_t *)"123456789", 9) == 0x772B);
+
+	uint8_t frame[M17_FRAME_BYTES];
+	const uint8_t link[M17_LINK_DATA_BYTES] = { 0 };
+	uint8_t decoded_link[M17_LINK_DATA_BYTES];
+	m17_link_encode(link, frame);
+	assert(memcmp(frame, link_vector, sizeof(frame)) == 0);
+	frame[5] ^= 0x20;
+	assert(m17_link_decode(frame, decoded_link) == 1);
+	assert(memcmp(link, decoded_link, sizeof(link)) == 0);
+
+	memset(frame + 2, 0, sizeof(frame) - 2);
+	assert(m17_link_decode(frame, decoded_link) == -1);
+	assert(m17_link_decode(packet_vector, decoded_link) == -1);
+
+	m17_packet_chunk_t chunk = { .data = { 0x12, 0x34, 0xFF }, .counter = 2, .final = 1 };
+	m17_packet_chunk_t decoded_chunk;
+	assert(m17_packet_encode(&chunk, frame) == 0);
+	assert(memcmp(frame, packet_vector, sizeof(frame)) == 0);
+	assert(m17_packet_decode(frame, &decoded_chunk) == 0);
+	assert(decoded_chunk.counter == 2 && decoded_chunk.final == 1);
+	assert(decoded_chunk.data[0] == 0x12 && decoded_chunk.data[1] == 0x34 && decoded_chunk.data[2] == 0);
+	assert(m17_packet_decode(link_vector, &decoded_chunk) == -1);
+
+	chunk.counter = 31;
+	assert(m17_packet_encode(&chunk, frame) == -1);
+	chunk.final = 0;
+	assert(m17_packet_encode(&chunk, frame) == 0);
+	assert(m17_packet_decode(frame, &decoded_chunk) == 0);
+	assert(decoded_chunk.counter == 31 && decoded_chunk.final == 0);
+	assert(memcmp(decoded_chunk.data, chunk.data, sizeof(chunk.data)) == 0);
+	return 0;
+}

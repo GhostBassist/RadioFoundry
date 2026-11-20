@@ -116,6 +116,11 @@ TESTS   += p25EngineTest
 p25EngineTest: p25EngineTest.c $(CORE)/p25/p25_engine.c $(CORE)/p25/p25_engine.h $(CORE)/air/air_session.c $(CORE)/air/air_session.h $(CORE)/air/air_framer.c $(P25) $(FEC)
 	$(CC) $(CFLAGS) -I$(ROOT)/hal -Wshadow -o $@ p25EngineTest.c $(CORE)/p25/p25_engine.c $(CORE)/air/air_session.c $(CORE)/air/air_framer.c $(P25) $(FEC)
 
+# M17 link setup and packet frames (core/m17)
+TESTS   += m17FrameTest
+m17FrameTest: m17FrameTest.c $(wildcard $(CORE)/m17/*.c $(CORE)/m17/*.h) $(CORE)/fec/conv.c $(CORE)/fec/conv.h
+	$(CC) $(CFLAGS) -Wshadow -o $@ $(filter %.c,$^)
+
 # NXDN frames, their FEC and calls through the framer (core/nxdn); the engine on two made-up providers
 NXDN    := $(CORE)/nxdn/nxdn_frame.c $(CORE)/nxdn/nxdn_rx.c $(CORE)/nxdn/nxdn_call.c
 TESTS   += nxdnTest nxdnEngineTest
@@ -229,6 +234,7 @@ run: $(TESTS)
 	./fecTest | tail -1
 	./airFramerTest
 	./p25Test
+	./m17FrameTest
 	./fxpTest
 	./mbeTest | tail -1
 	./imbeEncTest | tail -1
