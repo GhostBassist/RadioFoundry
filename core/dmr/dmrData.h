@@ -47,6 +47,7 @@
 
 // Burst flags
 #define DMR_BURST_FLAG_MCU_CRC		0x01		// TX: payload already holds its CRC / mask, the HR-C6000 must send it verbatim
+#define DMR_BURST_FLAG_RX_DEDICATED	0x04		// RX: the burst is on a dedicated packet-data downlink
 #define DMR_BURST_FLAG_RX_CRC_ERROR	0x02		// RX: the HR-C6000 reported a CRC error for this burst
 
 typedef struct

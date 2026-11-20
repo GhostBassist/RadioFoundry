@@ -1513,7 +1513,7 @@ static void testHyteraDownlink(void)
 		"123456789012345678901234567890",
 		"IP FULL RX2 ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 abcdef",
 	};
-	// Header CRCs for the fixture IDs after the repeater clears F and blocks-to-follow.
+	// The repeater sends a zero-block response request after the proprietary header and payload.
 	const uint8_t airCrc[][2] = {{0xC3, 0x0E}, {0x05, 0x69}};
 	for (unsigned i = 0; i < sizeof(sample) / sizeof(sample[0]); i++)
 	{
@@ -1536,13 +1536,15 @@ static void testHyteraDownlink(void)
 		memcpy(&bursts[0].payload[10], airCrc[i], sizeof(airCrc[i]));
 		CHECK(dmrDataCheckCRC16(bursts[0].payload, 0xCC));
 		int replies = sentCount;
-		rxBursts(bursts, 2);
+		bursts[0].flags |= DMR_BURST_FLAG_RX_DEDICATED;
+		bursts[1].flags |= DMR_BURST_FLAG_RX_DEDICATED;
+		rxBursts(bursts, 1); // a response request without a payload must be ignored
 		runMainTask(10);
 		CHECK(sentCount == replies);
-		rxBursts(bursts + 2, count - 3);
+		rxBursts(bursts + 1, count - 1); // model loss of the leading confirmed header
 		runMainTask(10);
 		CHECK(sentCount == replies);
-		rxBursts(bursts + count - 1, 1);
+		rxBursts(bursts, 1);
 		runMainTask(300);
 		CHECK(sms_inbox_get(0, &m) && m.src == RADIO_A + i && strcmp(m.text, sample[i]) == 0);
 	}

@@ -1420,7 +1420,7 @@ static struct
 {
 	bool held;
 	bool retry;							// this transmission is a selective retry of the held packet
-	bool inferLength;					// dedicated downlink header left its block count zero
+	bool orphan;						// dedicated downlink started with its proprietary second header
 	bool unmatched;						// F clear but nothing held to match: a retry of a packet we lost
 	uint32_t src, dst;
 	uint8_t sap, ns, total, padOctets, dataType;
@@ -1456,6 +1456,7 @@ static void confirmedHeader(const dmrDataPacket_t *p)
 	}
 	cnf.held = true;
 	cnf.retry = retry;
+	cnf.orphan = false;
 	cnf.unmatched = !p->firstTry && !retry;
 	cnf.arrived = 0;
 }
@@ -1508,26 +1509,25 @@ static dmrDataRxResult_t confirmedFinish(dmrDataPacket_t *p)
 	return DMR_DATA_RX_RETRY;
 }
 
-// The repeater can clear F and the block count on a dedicated v2 downlink. Once its second
-// header is heard, the envelope length and original pad count recover the number of data blocks.
+// The first block of a dedicated v2 downlink gives its length even if the receiver missed the
+// preceding confirmed header. Hold the blocks until the repeater sends the ACK request.
 static bool confirmedInferLength(dmrDataPacket_t *p, const dmrBurst_t *burst, int dataLen)
 {
 	const uint8_t *data = &burst->payload[2];
-	if (rxBlocksReceived != 1 || dataLen < 6 || (burst->payload[0] >> 1) != 0 ||
+	if (dataLen < 6 || (burst->payload[0] >> 1) != 0 ||
 	    data[0] != 0x02u || data[1] != 0x01u || data[4] != 0x68u || data[5] != 0x07u)
 	{
 		return false;
 	}
 	int length = 4 + ((data[2] << 8) | data[3]);
 	int blocks = dmrDataConfirmedBlocks(length, burst->dataType);
-	if (length < 42 || blocks <= 0 || blocks * dataLen > DMR_DATA_MAX_PACKET ||
-	    blocks * dataLen - 4 - length != cnf.padOctets)
+	if (length < 42 || blocks <= 0 || blocks * dataLen > DMR_DATA_MAX_PACKET)
 	{
 		return false;
 	}
 	cnf.total = blocks;
-	p->blocksToFollow = blocks + 1;
-	cnf.inferLength = false;
+	p->blocksToFollow = blocks;
+	cnf.padOctets = blocks * dataLen - 4 - length;
 	return true;
 }
 
@@ -1536,7 +1536,8 @@ static dmrDataRxResult_t confirmedBlock(dmrDataPacket_t *p, const dmrBurst_t *bu
 	int dataLen = burst->length - 2;
 
 	if ((dataLen <= 0) || (dataLen != dmrDataConfirmedBlockData(burst->dataType)) ||
-			(cnf.inferLength && !confirmedInferLength(p, burst, dataLen)) || (cnf.total == 0) ||
+			(cnf.orphan && cnf.total == 0 && !confirmedInferLength(p, burst, dataLen)) || (cnf.total == 0) ||
+			(cnf.orphan && rxBlocksReceived >= p->blocksToFollow) ||
 			(cnf.total > DMR_CONFIRMED_MAX_BLOCKS) || ((cnf.total * dataLen) > DMR_DATA_MAX_PACKET) ||
 			(cnf.filled && (burst->dataType != cnf.dataType)))
 	{
@@ -1565,7 +1566,7 @@ static dmrDataRxResult_t confirmedBlock(dmrDataPacket_t *p, const dmrBurst_t *bu
 		}
 	}
 
-	if (++rxBlocksReceived < p->blocksToFollow)
+	if (++rxBlocksReceived < p->blocksToFollow || cnf.orphan)
 	{
 		return DMR_DATA_RX_NONE;
 	}
@@ -1595,7 +1596,7 @@ dmrDataRxResult_t dmrDataRxConfirmedEnd(void)
 		return DMR_DATA_RX_NONE;
 	}
 	rxCollecting = false;
-	if (cnf.inferLength)
+	if (cnf.orphan)
 	{
 		cnf.held = false;
 		return DMR_DATA_RX_NONE;
@@ -1677,6 +1678,7 @@ dmrDataRxResult_t dmrDataRxBurst(const dmrBurst_t *burst)
 			// A proprietary second header (DPF 15) after the first: SAP 9 in the first header announces it, but a privacy
 			// header may follow a first header with the user data's SAP. It counts as one of the blocks to follow
 			if (rxCollecting && (rxBlocksReceived == 0) &&
+					!(p->dpf == DMR_DPF_CONFIRMED && cnf.orphan) &&
 					((p->sap == DMR_SAP_PROPRIETARY) || ((burst->payload[0] & 0x0F) == DMR_DPF_PROPRIETARY)))
 			{
 				bool crcOk = checkCRC16(burst->payload, 0xCC);
@@ -1685,13 +1687,6 @@ dmrDataRxResult_t dmrDataRxBurst(const dmrBurst_t *burst)
 				// A selective retry's second header says what the first try's did (kept): a bad CRC there costs
 				// nothing, while dropping it would drop the blocks held from the first try
 				if (!crcOk && !((p->dpf == DMR_DPF_CONFIRMED) && cnf.retry))
-				{
-					rxCollecting = false;
-					cnf.held = false;
-					return DMR_DATA_RX_ERROR;
-				}
-				if (cnf.inferLength && p->dpf == DMR_DPF_CONFIRMED &&
-				    (burst->payload[0] != 0x9Fu || burst->payload[1] != T3_FID_HYTERA_DT_CHECK))
 				{
 					rxCollecting = false;
 					cnf.held = false;
@@ -1717,17 +1712,56 @@ dmrDataRxResult_t dmrDataRxBurst(const dmrBurst_t *burst)
 				{
 					cnf.total--;// the second header is one of the blocks to follow
 				}
-				if (++rxBlocksReceived >= p->blocksToFollow && p->blocksToFollow != 0)
+				if (++rxBlocksReceived >= p->blocksToFollow)
 				{
 					rxCollecting = false;
 				}
 				return DMR_DATA_RX_NONE;
 			}
 
-			rxCollecting = false;
-			if (!checkCRC16(burst->payload, 0xCC) || !parseHeader(burst->payload, p))
 			{
-				return DMR_DATA_RX_ERROR;
+				bool orphan = rxCollecting && p->dpf == DMR_DPF_CONFIRMED && cnf.orphan;
+				rxCollecting = false;
+				if (!checkCRC16(burst->payload, 0xCC))
+				{
+					return DMR_DATA_RX_ERROR;
+				}
+				bool dedicated = (burst->flags & DMR_BURST_FLAG_RX_DEDICATED) != 0;
+				if (dedicated && burst->payload[0] == 0x9Fu && burst->payload[1] == T3_FID_HYTERA_DT_CHECK)
+				{
+					// The first header can be lost during TX-to-RX turnaround. Start with the
+					// vendor header and wait for the repeater's zero-block response request.
+					cnf.held = false;
+					p->dpf = DMR_DPF_CONFIRMED;
+					p->firstTry = false;
+					p->sap = DMR_SAP_PROPRIETARY;
+					p->src = T3_HYTERA_DT_CHECK_ID;
+					p->dst = 0;
+					p->sendSeq = 0;
+					p->blocksToFollow = 0;
+					p->padOctets = 0;
+					confirmedHeader(p);
+					cnf.orphan = true;
+					rxBlocksReceived = 0;
+					rxCollecting = true;
+					return DMR_DATA_RX_NONE;
+				}
+				if (!parseHeader(burst->payload, p))
+				{
+					return DMR_DATA_RX_ERROR;
+				}
+				if (dedicated && p->dpf == DMR_DPF_CONFIRMED && p->sap == DMR_SAP_PROPRIETARY &&
+				    p->src == T3_HYTERA_DT_CHECK_ID && !p->group && p->blocksToFollow == 0)
+				{
+					if (orphan && cnf.total != 0 && rxBlocksReceived == cnf.total &&
+					    p->responseRequested && p->padOctets == cnf.padOctets)
+					{
+						cnf.orphan = false;
+						return confirmedFinish(p);
+					}
+					cnf.held = false;
+					return DMR_DATA_RX_NONE;
+				}
 			}
 
 #if CONFIG_DEBUGLINK
@@ -1737,21 +1771,14 @@ dmrDataRxResult_t dmrDataRxBurst(const dmrBurst_t *burst)
 				confirmedTrace.emptyHeaders += p->blocksToFollow == 0;
 			}
 #endif
-			bool inferLength = p->blocksToFollow == 0 && p->dpf == DMR_DPF_CONFIRMED &&
-					   p->sap == DMR_SAP_PROPRIETARY && !p->group && p->src == T3_HYTERA_DT_CHECK_ID;
-			if (p->blocksToFollow == 0 && !inferLength)
+			if (p->blocksToFollow == 0)
 			{
 				p->dataType = DMR_TYPE_DATA_HEADER;
 				return DMR_DATA_RX_PACKET;
 			}
 			if (p->dpf == DMR_DPF_CONFIRMED)
 			{
-				if (inferLength)
-				{
-					cnf.held = false; // the gateway sends all blocks even with F clear
-				}
 				confirmedHeader(p);
-				cnf.inferLength = inferLength;
 			}
 			else
 			{

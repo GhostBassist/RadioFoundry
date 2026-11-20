@@ -2446,6 +2446,11 @@ static void data_rx(const dmr_burst_t *b, uint32_t now_ms, void *ctx)
 	d.flags = b->crc_ok ? 0 : DMR_BURST_FLAG_RX_CRC_ERROR;
 	memcpy(d.payload, b->payload, d.length);
 #if CONFIG_DMR_TRUNK_TX
+	if (t3m.state == T3_FOLLOW && t3m.call.data && !t3m.call.ours && !t3m.call.group &&
+	    t3m.call.src == T3_HYTERA_DT_CHECK_ID &&
+	    (t3m.call.dst == t3m.cfg->own_id || t3m.call.dst == t3m.cfg->reg_id)) {
+		d.flags |= DMR_BURST_FLAG_RX_DEDICATED;
+	}
 	if (b->kind != DMR_BURST_CSBK) {
 		t3_ms_data_heard(&t3m, now_ms);	// a reply on the radio's data channel holds it a while longer
 	}
