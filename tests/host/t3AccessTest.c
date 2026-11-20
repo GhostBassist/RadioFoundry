@@ -3162,6 +3162,18 @@ static void test_hytera_data_terminal_check(void)
 	rx(&ms, 1, &downlink);
 	CHECK(ms.state == T3_FOLLOW && ms.call.data && !ms.call.ours && ms.ax.result == T3_RES_GRANTED,
 	      "follow the download grant as the recipient");
+	nsent = 0;
+	frames(&ms, 6);
+	uint8_t ready[] = { 0xAAu, 0x68u, 0x30u, 0x1Au, 0xFFu, 0xFDu, 0x01u,
+			    OWN >> 16, (OWN >> 8) & 0xFFu, OWN & 0xFFu };
+	CHECK(nsent == 1 && sent_act[0].payload && sent_act[0].slot == 2 &&
+	      memcmp(sent_act[0].burst, ready, sizeof(ready)) == 0 &&
+	      t3_crc_ok(sent_act[0].burst, T3_CRC_MASK_CSBK), "send captured downlink readiness on the granted slot");
+	t3_csbk_t check_payload = ahoy(T3_SK_IND_DATA, false, OWN, T3_HYTERA_DT_CHECK_ID);
+	rx(&ms, 2, &check_payload);
+	frames(&ms, 1);
+	CHECK(nsent == 2 && memcmp(sent_act[1].burst, ready, sizeof(ready)) == 0,
+	      "repeat dedicated readiness when the downlink gateway checks the recipient");
 }
 
 int main(void)

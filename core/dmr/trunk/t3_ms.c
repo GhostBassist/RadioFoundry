@@ -447,6 +447,25 @@ static void follow(t3_ms_t *ms, uint32_t now, const t3_csbk_t *p, const t3_chan_
 	tune(ms, now, &ch, g->slot, true);
 }
 
+// A dedicated downlink starts with the recipient's vendor-specific P_MAINT on the granted slot.
+static void hytera_downlink_ready(t3_ms_t *ms, uint8_t slot)
+{
+	uint32_t id = my_id(ms);
+	uint8_t ready[T3_CSBK_BYTES] = {
+		0x80u | T3_OP_P_MAINT, T3_FID_HYTERA_DT_CHECK, 0x30u, 0x1Au,
+		T3_HYTERA_DT_CHECK_ID >> 16, (T3_HYTERA_DT_CHECK_ID >> 8) & 0xFFu,
+		T3_HYTERA_DT_CHECK_ID & 0xFFu, id >> 16, id >> 8, id,
+	};
+	memcpy(ms->tx.burst, ready, sizeof(ready));
+	t3_crc_append(ms->tx.burst, T3_CRC_MASK_CSBK);
+	ms->tx.count = 1;
+	ms->tx.slot = slot;
+	ms->tx.payload = true;
+	ms->tx.request_pddi = false;
+	ms->tx.then_return = false;
+	ms->tx.udt = false;
+}
+
 // A grant heard on the TSCC (camped) or on the payload channel (a move or a second call). chan is set when an
 // appended CG_AP gave the frequencies
 static void on_grant(t3_ms_t *ms, uint32_t now, const t3_csbk_t *p, const t3_chan_t *chan)
@@ -501,6 +520,9 @@ static void on_grant(t3_ms_t *ms, uint32_t now, const t3_csbk_t *p, const t3_cha
 	}
 	ms->ring_src = 0;
 	follow(ms, now, p, &c, group);
+	if (download) {
+		hytera_downlink_ready(ms, ms->call.slot);
+	}
 	if (answered || download || (ms->call.ours && ms->ax.state != T3_AX_IDLE &&
 	    (ms->call.data ? ms->ax.svc == T3_SVC_PDATA : is_voice(ms->ax.svc)))) {
 		finish(ms, now, T3_RES_GRANTED);
@@ -1621,6 +1643,9 @@ static void on_ahoy(t3_ms_t *ms, uint32_t now, uint8_t slot, const t3_ahoy_t *h,
 		}
 	} else if (to_me && !payload && h->kind == T3_SK_IND_VOICE) {
 		answer(ms, slot, false, T3_RC_MS_ACCEPTED, h->src, false);	// availability check: OACSU
+	} else if (payload && to_me && h->src == T3_HYTERA_DT_CHECK_ID && ms->call.data &&
+		   !ms->call.ours && ms->call.src == h->src) {
+		hytera_downlink_ready(ms, slot);
 	} else if (payload && h->src == T3_ID_TSI && (h->kind == T3_SK_IND_DATA || h->kind == T3_SK_TG_DATA)) {
 		// Packet data radio check on the payload channel (6.6.3.3.2.1; table 6.51, cited there as 6.53)
 		answer(ms, slot, true, T3_RC_MESSAGE_ACCEPTED, h->src, false);
