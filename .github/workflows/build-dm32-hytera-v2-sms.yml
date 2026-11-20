@@ -27,8 +27,13 @@ jobs:
           tools/docker/csky-toolchain/run.sh make -j2 BOARD=dm32
           tools/docker/csky-toolchain/run.sh make BOARD=dm32 size
           sha256sum build/dm32/rfoundry_dm32.bin
+          tools/docker/csky-toolchain/run.sh csky-elf-objdump -dr build/dm32/core/dmr/dmrData.o > build/dm32/dmrData.dis
+          tools/docker/csky-toolchain/run.sh csky-elf-objdump -dr build/dm32/core/dmr/dmrDataService.o > build/dm32/dmrDataService.dis
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: dm32-hytera-dedicated-v2-fa454b5f
-          path: build/dm32/rfoundry_dm32.bin
+          path: |
+            build/dm32/rfoundry_dm32.bin
+            build/dm32/dmrData.dis
+            build/dm32/dmrDataService.dis
           if-no-files-found: error
