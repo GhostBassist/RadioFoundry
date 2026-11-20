@@ -51,7 +51,7 @@ Pass criteria:
   data service sends PDATA_TEXT as an IP text message to --t3-peer. Within PDATA_S the engine asks for a data channel
   (t3.ax_svc pdata seen), the message is sent (data.sms_state ok; confirmed: the peer acknowledged its blocks) and the radio
   is back on the control channel within CLEAR_S.
-- test_t3_pdata_pair (radio_tx; needs --peer-port, --t3-rx-mhz and --t3-tx-mhz): both radios already
+- test_t3_pdata_pair (radio_tx; needs --radio-port, --peer-port and control channel frequencies): both radios already
   registered on the same site. Each receives the other's exact long IP text and queues its confirmed data response
   within 100 seconds.
 - test_t3_reg_list (radio_tx; needs --t3-tg-list): registration by talkgroup with --t3-tg and --t3-tg-list
@@ -89,6 +89,7 @@ codeplug as they found it: they refuse a slot, channel record or tag already the
 """
 import subprocess
 import time
+from contextlib import ExitStack
 from uuid import uuid4
 
 import pytest
@@ -478,13 +479,19 @@ def test_t3_pdata(trunk_tx, pytestconfig, ack):
 @pytest.mark.feature("dmr_trunk_tx")
 @pytest.mark.second_radio
 @pytest.mark.radio_tx
-def test_t3_pdata_pair(radio, pytestconfig):
+def test_t3_pdata_pair(pytestconfig):
     """Use two already registered radios. Each inbox must receive the exact text and original sender."""
+    port = rig(pytestconfig, "radio-port", "a registered radio")
     peer_port = rig(pytestconfig, "peer-port", "a second registered radio")
     rx_hz = round(rig(pytestconfig, "t3-rx-mhz", "the site's control channel") * 1e6)
     tx_hz = round(rig(pytestconfig, "t3-tx-mhz", "the site's control channel") * 1e6)
-    peer = Radio(peer_port)
-    try:
+    with ExitStack() as links:
+        radio = Radio(port)
+        links.callback(radio.close)
+        links.callback(radio.tx_gate_end)
+        peer = Radio(peer_port)
+        links.callback(peer.close)
+        links.callback(peer.tx_gate_end)
         views = [t3(r) for r in (radio, peer)]
         for r, view in zip((radio, peer), views):
             if view.get("t3.tx_built") != "1" or r.link.view(["dmr_data"]).get("data.built") != "1":
@@ -495,6 +502,7 @@ def test_t3_pdata_pair(radio, pytestconfig):
         assert views[0]["t3.syscode"] == views[1]["t3.syscode"], "radios are camped on different Tier III sites"
         own, other = (num(view, "t3.own_id") for view in views)
         assert own and other and own != other, "the radios need distinct nonzero subscriber IDs"
+        radio.tx_gate(True)
         peer.tx_gate(True)
         for sender, receiver, src, dst in ((radio, peer, own, other), (peer, radio, other, own)):
             text = f"Tier III IP SMS {uuid4().hex[:8]} 0123456789 ABCDEFGHIJKLMNOPQ"
@@ -528,11 +536,7 @@ def test_t3_pdata_pair(radio, pytestconfig):
                 time.sleep(0.2)
             else:
                 raise AssertionError("the radios did not settle on the control channel after delivery")
-    finally:
-        try:
-            peer.tx_gate_end()
-        finally:
-            peer.close()
+
 
 @pytest.mark.feature("dmr_trunk_tx")
 @pytest.mark.radio_tx
