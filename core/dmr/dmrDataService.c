@@ -1098,6 +1098,7 @@ static bool ipResponse(const dmrDataPacket_t *packet)
 		}
 		case 1:
 			stats.ipCnfNacks++;
+			stats.ipCnfNackLast = r;
 			switch (DMR_RESPONSE_TYPE(r))
 			{
 				case DMR_RESPONSE_NACK_SEQUENCE:

@@ -211,6 +211,7 @@ typedef struct
 	uint32_t ipCnfAcks;						// ACKs received for ours
 	uint32_t ipCnfSacks;					// selective ACKs (some blocks again)
 	uint32_t ipCnfNacks;					// NACKs
+	uint8_t ipCnfNackLast;					// last matched NACK response octet
 	uint32_t ipCnfResyncs;					// ... of those, N(S) out of sequence: the receiver's next number taken
 	uint32_t ipCnfTimeouts;					// no response within DMR_IPC_RESPONSE_MS
 	uint32_t ipCnfFailed;					// confirmed packets given up after the tries (or refused)

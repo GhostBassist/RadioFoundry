@@ -1248,6 +1248,7 @@ static void testIpTx(void)
 	CHECK(st.ipPackets - st0.ipPackets == 11 && st.ipSent - st0.ipSent == 8 && st.ipFailed - st0.ipFailed == 3);
 	CHECK(st.ipConfirmed - st0.ipConfirmed == 8 && st.ipCnfAcks - st0.ipCnfAcks == 6 && st.ipCnfSacks - st0.ipCnfSacks == 1);
 	CHECK(st.ipCnfNacks - st0.ipCnfNacks == 1 && st.ipCnfResyncs - st0.ipCnfResyncs == 1 && st.ipCnfTooLong - st0.ipCnfTooLong == 0);
+	CHECK(st.ipCnfNackLast == (0x40 | (DMR_RESPONSE_NACK_SEQUENCE << 3) | 3));
 	CHECK(st.ipCnfTimeouts - st0.ipCnfTimeouts == DMR_IPC_TRIES_DEFAULT + 3 && st.ipCnfFailed - st0.ipCnfFailed == 3);
 	CHECK(st.ipCnfRetries - st0.ipCnfRetries == 2 + (DMR_IPC_TRIES_DEFAULT - 1) + 1);
 	ipSettings(DMR_UDPC_AUTO, DMR_IPC_RULES, 0, 0, 0);
