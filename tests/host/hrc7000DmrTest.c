@@ -1497,6 +1497,25 @@ static void test_tx_repeater_lock(void)
 		}
 	}
 
+	// An already locked repeater needs no additional RX interrupt to arm an aligned reply.
+	setup();
+	hrc7000_dmr_run(&eng);
+	const dmr_config_t locked = { .own_id = 1234, .cc = 5, .access = DMR_ACCESS_IMPOLITE, .repeater = true };
+	hrc7000_dmr_configure(&eng, &locked);
+	for (int k = 0; k < 4; k++) {
+		tick(false);
+		deframe_at(rti(0, 9, 5, 1, 0, (uint8_t)(k & 1)), 25000);
+	}
+	now += 25000;
+	CHECK(hrc7000_dmr_tx_begin(&eng, DMR_TIMING_ALIGNED, 2, DMR_ACCESS_IMPOLITE));
+	dmr_tx_burst_t reply = { .kind = DMR_BURST_CSBK, .len = 12 };
+	CHECK(hrc7000_dmr_tx_queue(&eng, &reply));
+	now -= 25000;
+	tick(true);
+	CHECK(REG(C7_LAYER2_CONTROL) == 0xC4 && REG(C7_LAYER2_TXRX_CTRL) == 0x80u);
+	hrc7000_dmr_tx_abort(&eng);
+	tick(true);
+
 	// No lock (TC stuck): refused after the wait, nothing armed
 	setup();
 	hrc7000_dmr_run(&eng);

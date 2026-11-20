@@ -747,6 +747,7 @@ bits.
 
 ## 6. Transmit sequences
 
+A repeater with a valid TC lock and a burst heard within two slots can arm TX before the next receive interrupt.
 LOCAL_CC keeps the receive code during an aligned start's TC lock wait. Once locked, or at an unaligned start,
 the driver writes the channel's transmit code in bits 3:0 and keeps it through the final burst. After TX it restores
 the receive filter or scan code. A receive filter changed during TX takes effect when TX finishes.

@@ -1197,6 +1197,11 @@ bool hrc7000_dmr_tx_begin(hrc7000_dmr_t *e, dmr_timing_t timing, int8_t ts, dmr_
 		e->st.txb_last_ts = e->st.last_ts;
 		e->st.txb_rx_type_info = e->st.last_rx_type_info;
 		e->st.txb_rx_hist = e->st.rx_hist;
+		// A fresh lock can set up the TX vector now. Waiting for the next RX tick first
+		// can cost a whole frame before a short reply on a slot we already have.
+		if (e->tx_bs && e->rx_any && now(e) - e->t_rx < 2u * SLOT_US && tc_locked(e)) {
+			lock_tick(e);
+		}
 	}
 	unlock(e);
 	return ok;
