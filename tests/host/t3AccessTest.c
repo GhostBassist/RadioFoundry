@@ -2321,8 +2321,12 @@ static void test_hytera_pdui_grant(void)
 	nsent = 0;
 	t3_ms_data_done(&ms, T, true);
 	frames(&ms, 6);
-	CHECK(nsent == T3_N_MAINT && sent[0].op == T3_OP_P_MAINT && ms.state == T3_CAMPED,
-	      "release the dedicated uplink before the normal data linger");
+	const uint8_t complete[] = { 0xAAu, 0x00u, 0x30u, 0x10u, 0xFFu, 0xFDu, 0x02u,
+				     OWN >> 16, (OWN >> 8) & 0xFFu, OWN & 0xFFu };
+	CHECK(nsent == 1 && sent_act[0].payload && sent_act[0].slot == 2 &&
+	      memcmp(sent_act[0].burst, complete, sizeof(complete)) == 0 &&
+	      t3_crc_ok(sent_act[0].burst, T3_CRC_MASK_CSBK) && ms.state == T3_CAMPED,
+	      "tell the dedicated uplink gateway the upload completed and return to the control channel");
 }
 
 // Packet data (6.6.3): the radio asks for a data channel and follows PD_GRANT / TD_GRANT; to it, the TSCC checks it is

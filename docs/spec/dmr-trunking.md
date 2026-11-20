@@ -513,9 +513,11 @@ with Response Info 1 and the reserved bit clear, matching the native terminal re
 After that reply, the radio requests individual packet data from the dedicated downlink gateway.
 A grant addressed to the radio from that gateway completes the request and is followed as a receive call.
 A System Busy response from the gateway is retried after two and then four seconds within the same access deadline.
+These retries have their own budget separate from the random access attempts that preceded the busy response.
 On that downlink the recipient sends the captured vendor-specific P_MAINT (FID 0x68, fields 0x301A) on the payload slot.
 It repeats that readiness PDU if the downlink gateway checks the recipient on the same call.
-A confirmed upload to the dedicated gateway ends its payload call as soon as it is acknowledged.
+After the link ACK for a confirmed upload, the sender transmits P_MAINT (FID 0x00, fields 0x3010) to the dedicated
+uplink gateway (0xFFFD02) on the granted slot. It returns to the control channel after this completion burst.
 The recipient uses a separate downlink grant, so the upload does not wait through the data linger.
 
 **To an IP gateway (multi-part, 6.6.3.2.3).** `t3_ms_pdata_ip` asks for packet data to an IPv4 address outside the
