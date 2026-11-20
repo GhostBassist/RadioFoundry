@@ -120,6 +120,20 @@ endif
 ifeq ($(CONFIG_NXDN),y)
 CORE_DIRS += core/nxdn
 endif
+ifeq ($(CONFIG_M17),y)
+CORE_DIRS += core/m17
+ifeq ($(strip $(M17_CODEC2_PREFIX)),)
+$(error CONFIG_M17=y needs M17_CODEC2_PREFIX pointing to a target Codec 2 installation)
+endif
+M17_CODEC2_ARCHIVE := $(M17_CODEC2_PREFIX)/lib/libcodec2.a
+M17_CODEC2_INCLUDE := $(M17_CODEC2_PREFIX)/include
+ifeq ($(wildcard $(M17_CODEC2_ARCHIVE)),)
+$(error Target Codec 2 archive missing at $(M17_CODEC2_ARCHIVE))
+endif
+ifeq ($(wildcard $(M17_CODEC2_INCLUDE)/codec2/codec2.h),)
+$(error Target Codec 2 headers missing under $(M17_CODEC2_INCLUDE)/codec2)
+endif
+endif
 ifeq ($(CONFIG_MBE),y)
 CORE_DIRS += core/mbe
 endif
@@ -229,6 +243,9 @@ endif
 endif
 
 INCLUDES := -Ihal -Icore -Idrivers -Iboards/$(BOARD) -Iplatform/$(PLATFORM) -I$(BUILD)/gen $(PLATFORM_INC)
+ifeq ($(CONFIG_M17),y)
+INCLUDES += -I$(M17_CODEC2_INCLUDE) -I$(M17_CODEC2_INCLUDE)/codec2
+endif
 
 # Firmware version: the commit, with -dirty when tracked files differ from it or untracked sources sit in the built
 # directories (both end up in the image). Only the files that use RFOUNDRY_GIT or RFOUNDRY_RELEASE get it, through
@@ -285,6 +302,10 @@ LDSPECS ?= --specs=nano.specs --specs=nosys.specs -Wl,--no-warn-rwx-segments
 APP_START := $(APP_BASE)$(if $(BOOT_STAGE),+$(BOOT_SIZE))
 LDFLAGS := $(CPUFLAGS) -T$(LDSCRIPT) -Lplatform/$(PLATFORM) -Wl,--defsym=__app_base=$(APP_BASE) \
 	-Wl,--defsym=__app_start=$(APP_START) -Wl,--gc-sections -Wl,-Map=$(TARGET).map -Wl,--print-memory-usage $(LDSPECS)
+ifeq ($(CONFIG_M17),y)
+# Keep the PCM bridge in experimental firmware to measure its target link cost before mode selection is enabled.
+LDFLAGS += -Wl,-u,m17_pcm_start,-u,m17_pcm_stop,-u,m17_pcm_rx_push,-u,m17_pcm_tx_finish,-u,m17_pcm_tx_speech
+endif
 # Link time optimization: LTO=1 compiles our sources to GCC's IR and optimizes them together at the link (inlining and
 # dead code across files: about 17 KB smaller on the STM32 radios, 20 KB with LTO_3P). A board's config.mk may default
 # it (some STM32 radios do: without it their images don't hold their features). LTO_3P=1 takes the
@@ -389,9 +410,9 @@ ifeq ($(LTO),1)
 $(patsubst %.c,$(BUILD)/%.o,$(filter $(LTO_EXCLUDE),$(APP_SRC))): CFLAGS_APP += -fno-lto
 endif
 
-$(TARGET).elf: $(OBJ) $(LDSCRIPT) $(wildcard platform/$(PLATFORM)/*.ld)
+$(TARGET).elf: $(OBJ) $(LDSCRIPT) $(wildcard platform/$(PLATFORM)/*.ld) $(M17_CODEC2_ARCHIVE)
 	@rm -f $@.ltrans*.ci	# LTO's call graphs, one per partition: none left from a link with more partitions
-	$(CC) $(LDFLAGS) -o $@ $(OBJ) -lm
+	$(CC) $(LDFLAGS) -o $@ $(OBJ) $(M17_CODEC2_ARCHIVE) -lm
 $(TARGET).bin: $(TARGET).elf
 	$(OBJCOPY) -O binary $(addprefix -j ,$(BIN_SECTIONS)) $< $@
 	@echo "image $@: $$(wc -c < $@ | tr -d ' ') bytes, version $(RFOUNDRY_VERSION)$(if $(RFOUNDRY_RELEASE), ($(RFOUNDRY_RELEASE)))"

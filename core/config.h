@@ -139,6 +139,9 @@
 #ifndef CONFIG_DEBUGLINK
 #define CONFIG_DEBUGLINK		CONFIG_HOSTLINK
 #endif
+#ifndef CONFIG_ADC_RX_PROBE
+#define CONFIG_ADC_RX_PROBE		0
+#endif
 #ifndef CONFIG_TASK_STACKS
 #define CONFIG_TASK_STACKS		CONFIG_DEBUGLINK
 #endif
@@ -331,6 +334,9 @@
 #endif
 #ifndef CONFIG_AIR
 #define CONFIG_AIR			(CONFIG_P25 || CONFIG_NXDN)
+#endif
+#ifndef CONFIG_M17
+#define CONFIG_M17			0
 #endif
 // P25 trunked: the codec of its systems and channels (docs/spec/p25-codeplug.md 3), the control channel decoded, voice
 // channel grants followed and, where the system allows it, registration and transmit on a grant (core/p25/p25_follow.c)

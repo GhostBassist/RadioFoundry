@@ -2,12 +2,75 @@
 // Copyright (c) 2026 The RadioFoundry Authors
 
 #include "m17/m17_codec2.h"
+#include "m17/m17_pcm.h"
 
 #include <assert.h>
 #include <string.h>
 
+static audio_block_cb_t callback;
+static void *callback_ctx;
+static bool speaker;
+
+static bool audio_start(audio_block_cb_t cb, void *ctx)
+{
+	callback = cb;
+	callback_ctx = ctx;
+	return true;
+}
+
+static void audio_stop(void)
+{
+	callback = NULL;
+}
+
+static void speaker_pcm(bool on)
+{
+	speaker = on;
+}
+
+static void pcm_bridge(void)
+{
+	static const hal_audio_t audio = { .start = audio_start, .stop = audio_stop, .speaker_pcm = speaker_pcm };
+	int16_t mic[AUDIO_BLOCK_SAMPLES];
+	int16_t out[AUDIO_BLOCK_SAMPLES];
+	uint8_t speech[M17_STREAM_BYTES], next[M17_STREAM_BYTES];
+	m17_pcm_t pcm = { 0 };
+	bool final = false;
+	assert(m17_pcm_start(&pcm, &audio, true));
+	assert(!speaker && callback);
+	for (unsigned i = 0; i < AUDIO_BLOCK_SAMPLES; i++)
+		mic[i] = (int16_t)(((int)(i % 40u) - 20) * 400);
+	callback(mic, out, callback_ctx);
+	assert(!m17_pcm_tx_speech(speech, &final, &pcm));
+	callback(mic, out, callback_ctx);
+	assert(m17_pcm_tx_speech(speech, &final, &pcm) && !final);
+	m17_pcm_tx_finish(&pcm);
+	assert(m17_pcm_tx_speech(next, &final, &pcm) && final);
+	assert(memcmp(next, pcm.silence, sizeof(next)) == 0);
+	m17_pcm_stop(&pcm);
+	assert(!callback);
+
+	assert(m17_pcm_start(&pcm, &audio, false) && speaker);
+	for (unsigned i = 0; i < M17_PCM_QUEUE - 1; i++)
+		assert(m17_pcm_rx_push(&pcm, speech));
+	assert(!m17_pcm_rx_push(&pcm, speech));
+	unsigned audible = 0;
+	for (unsigned block = 0; block < 2 * (M17_PCM_QUEUE - 1); block++) {
+		callback(mic, out, callback_ctx);
+		for (unsigned i = 0; i < AUDIO_BLOCK_SAMPLES; i++)
+			audible += out[i] != 0;
+	}
+	assert(audible > 0);
+	callback(mic, out, callback_ctx);
+	for (unsigned i = 0; i < AUDIO_BLOCK_SAMPLES; i++)
+		assert(out[i] == 0);
+	m17_pcm_stop(&pcm);
+	assert(!speaker && !callback);
+}
+
 int main(void)
 {
+	pcm_bridge();
 	m17_codec2_t codec = { 0 };
 	int16_t pcm[M17_VOICE_PCM_SAMPLES];
 	uint8_t speech[M17_STREAM_BYTES] = { 0 };

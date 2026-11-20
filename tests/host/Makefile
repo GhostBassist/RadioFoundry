@@ -118,7 +118,7 @@ p25EngineTest: p25EngineTest.c $(CORE)/p25/p25_engine.c $(CORE)/p25/p25_engine.h
 
 # M17 link setup and packet frames (core/m17)
 TESTS   += m17FrameTest
-M17 := $(filter-out $(CORE)/m17/m17_codec2.c,$(wildcard $(CORE)/m17/*.c))
+M17 := $(filter-out $(addprefix $(CORE)/m17/m17_,codec2.c codec2_alloc.c pcm.c),$(wildcard $(CORE)/m17/*.c))
 M17_FEC := $(CORE)/fec/conv.c $(CORE)/fec/conv.h $(CORE)/fec/golay.c $(CORE)/fec/golay.h
 m17FrameTest: m17FrameTest.c $(M17) $(wildcard $(CORE)/m17/*.h) $(M17_FEC) $(CORE)/air/air_framer.c $(CORE)/air/air_framer.h $(CORE)/air/air_session.c $(CORE)/air/air_session.h
 	$(CC) $(CFLAGS) -Wshadow -o $@ $(filter %.c,$^)
@@ -130,7 +130,7 @@ CODEC2_LIBS ?= $(shell pkg-config --libs codec2)
 run-m17-codec2: out/m17Codec2Test
 	./out/m17Codec2Test
 
-out/m17Codec2Test: m17Codec2Test.c $(addprefix $(CORE)/m17/m17_,codec2.c voice.c frame.c link.c) $(wildcard $(CORE)/m17/*.h) $(M17_FEC)
+out/m17Codec2Test: m17Codec2Test.c $(addprefix $(CORE)/m17/m17_,codec2.c pcm.c voice.c frame.c link.c) $(wildcard $(CORE)/m17/*.h) $(ROOT)/hal/hal_audio.h $(M17_FEC)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(CODEC2_CFLAGS) -Wshadow -o $@ $(filter %.c,$^) $(CODEC2_LIBS)
 
