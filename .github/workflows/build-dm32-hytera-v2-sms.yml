@@ -13,13 +13,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: db7b9488ae8d8bc0c9f997fca8f13a83daf92ef3
+          ref: 720cd942a194e000add1a6ad9c9ce40c28b45029
           persist-credentials: false
           submodules: recursive
       - name: Build and identify firmware
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = db7b9488ae8d8bc0c9f997fca8f13a83daf92ef3
+          test "$(git rev-parse HEAD)" = 720cd942a194e000add1a6ad9c9ce40c28b45029
           make -C tests/host run-t3access dmrDataTest dmrDataServiceTest
           tests/host/dmrDataTest > /tmp/dmrDataTest.log || { tail -n 50 /tmp/dmrDataTest.log; exit 1; }
           tail -n 1 /tmp/dmrDataTest.log
@@ -29,6 +29,6 @@ jobs:
           sha256sum build/dm32/rfoundry_dm32.bin
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: dm32-hytera-dedicated-v2-db7b9488
+          name: dm32-hytera-dedicated-v2-720cd942
           path: build/dm32/rfoundry_dm32.bin
           if-no-files-found: error
