@@ -118,8 +118,21 @@ p25EngineTest: p25EngineTest.c $(CORE)/p25/p25_engine.c $(CORE)/p25/p25_engine.h
 
 # M17 link setup and packet frames (core/m17)
 TESTS   += m17FrameTest
-m17FrameTest: m17FrameTest.c $(wildcard $(CORE)/m17/*.c $(CORE)/m17/*.h) $(CORE)/fec/conv.c $(CORE)/fec/conv.h $(CORE)/fec/golay.c $(CORE)/fec/golay.h $(CORE)/air/air_framer.c $(CORE)/air/air_framer.h $(CORE)/air/air_session.c $(CORE)/air/air_session.h
+M17 := $(filter-out $(CORE)/m17/m17_codec2.c,$(wildcard $(CORE)/m17/*.c))
+M17_FEC := $(CORE)/fec/conv.c $(CORE)/fec/conv.h $(CORE)/fec/golay.c $(CORE)/fec/golay.h
+m17FrameTest: m17FrameTest.c $(M17) $(wildcard $(CORE)/m17/*.h) $(M17_FEC) $(CORE)/air/air_framer.c $(CORE)/air/air_framer.h $(CORE)/air/air_session.c $(CORE)/air/air_session.h
 	$(CC) $(CFLAGS) -Wshadow -o $@ $(filter %.c,$^)
+
+# Optional test against a separately installed Codec 2 library.
+CODEC2_CFLAGS ?= $(shell pkg-config --cflags codec2 && pkg-config --variable=includedir codec2 | sed 's|^| -I|; s|$$|/..|')
+CODEC2_LIBS ?= $(shell pkg-config --libs codec2)
+.PHONY: run-m17-codec2
+run-m17-codec2: out/m17Codec2Test
+	./out/m17Codec2Test
+
+out/m17Codec2Test: m17Codec2Test.c $(addprefix $(CORE)/m17/m17_,codec2.c voice.c frame.c link.c) $(wildcard $(CORE)/m17/*.h) $(M17_FEC)
+	mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(CODEC2_CFLAGS) -Wshadow -o $@ $(filter %.c,$^) $(CODEC2_LIBS)
 
 # NXDN frames, their FEC and calls through the framer (core/nxdn); the engine on two made-up providers
 NXDN    := $(CORE)/nxdn/nxdn_frame.c $(CORE)/nxdn/nxdn_rx.c $(CORE)/nxdn/nxdn_call.c
