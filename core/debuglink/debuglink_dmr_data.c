@@ -59,6 +59,14 @@ static void ip_section(const dmrDataStats_t *s, const dmrDataSettings_t *set, dl
 
 	dmrDataGetIpTxStats(&x);
 	dl_text(t, "ip.built=1\nip.compress_built=%u\nip.confirmed_built=1\n", CONFIG_DMR_UDP_COMPRESS);
+	dmrDataConfirmedTrace_t rx;
+	dmrDataRxConfirmedTrace(&rx);
+	dl_text(t, "ip.confirmed_finish=%u,%u,%u,%u\nip.confirmed_header=", (unsigned)rx.completed,
+		(unsigned)rx.emptyHeaders, (unsigned)rx.calculatedLength, (unsigned)rx.storedLength);
+	for (unsigned i = 0; i < sizeof(rx.header); i++) {
+		dl_text(t, "%02x", (unsigned)rx.header[i]);
+	}
+	dl_text(t, "\n");
 	dl_text(t, "ip.dedicated_trace=%u,%u\n", (unsigned)s->hyteraRxEvents, (unsigned)s->hyteraRxEncrypted);
 	if (s->hyteraRxEvents != 0) {
 		dl_text(t, "ip.dedicated_rx=%u,%u,%u,%u\nip.dedicated_prefix=", (unsigned)s->hyteraRxSap, (unsigned)s->hyteraRxLength,

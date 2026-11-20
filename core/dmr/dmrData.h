@@ -386,6 +386,17 @@ dmrDataRxResult_t dmrDataRxConfirmedEnd(void);
 bool dmrDataRxConfirmedActive(void);
 // Confirmed blocks whose CRC-9 failed in packets the CRC-32 then passed (our CRC-9 disagreeing with a sender's)
 uint32_t dmrDataRxCrc9Mismatches(void);
+#if CONFIG_DEBUGLINK
+typedef struct
+{
+	uint32_t completed;
+	uint32_t emptyHeaders;
+	uint16_t calculatedLength;
+	uint16_t storedLength;
+	uint8_t header[10];
+} dmrDataConfirmedTrace_t;
+void dmrDataRxConfirmedTrace(dmrDataConfirmedTrace_t *out);
+#endif
 typedef struct
 {
 	uint16_t srcPort;

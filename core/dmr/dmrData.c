@@ -21,6 +21,14 @@
 #define UDPC_ID_GROUP_NETWORK		2
 
 DMR_DATA_BUFFER dmrDataPacket_t dmrDataRxPacket;
+#if CONFIG_DEBUGLINK
+static dmrDataConfirmedTrace_t confirmedTrace;
+
+void dmrDataRxConfirmedTrace(dmrDataConfirmedTrace_t *out)
+{
+	*out = confirmedTrace;
+}
+#endif
 
 static uint16_t ipIdentification = 0;
 DMR_DATA_BUFFER static uint8_t txPacket[DMR_DATA_MAX_PACKET];
@@ -1475,6 +1483,11 @@ static dmrDataRxResult_t confirmedFinish(dmrDataPacket_t *p)
 			p->dataType = cnf.dataType;
 			p->privacy = cnf.privacy;
 			rxDecrypt(p);
+#if CONFIG_DEBUGLINK
+			confirmedTrace.completed++;
+			confirmedTrace.calculatedLength = bytes - 4 - cnf.padOctets;
+			confirmedTrace.storedLength = p->length;
+#endif
 			return DMR_DATA_RX_PACKET;
 		}
 		if (cnf.good == cnfAll())
@@ -1679,6 +1692,13 @@ dmrDataRxResult_t dmrDataRxBurst(const dmrBurst_t *burst)
 				return DMR_DATA_RX_ERROR;
 			}
 
+#if CONFIG_DEBUGLINK
+			if (p->dpf == DMR_DPF_CONFIRMED)
+			{
+				memcpy(confirmedTrace.header, burst->payload, sizeof(confirmedTrace.header));
+				confirmedTrace.emptyHeaders += p->blocksToFollow == 0;
+			}
+#endif
 			if (p->blocksToFollow == 0)
 			{
 				p->dataType = DMR_TYPE_DATA_HEADER;
