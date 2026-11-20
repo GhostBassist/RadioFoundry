@@ -3137,7 +3137,8 @@ static void test_hytera_data_terminal_check(void)
 	CHECK(nsent == 1 && sent_act[0].slot == 1 && sent[0].op == T3_OP_C_ACKU &&
 	      sent[0].u.ack.reason == T3_RC_MS_ACCEPTED && sent[0].u.ack.dst == T3_HYTERA_DT_CHECK_ID &&
 	      sent[0].u.ack.src == OWN, "answer the Hytera data terminal check on its control slot");
-	CHECK(sent_act[0].burst[3] == 0x89u, "set the reserved bit after MS_Accepted");
+	CHECK(sent_act[0].burst[2] == 0x02u && sent_act[0].burst[3] == 0x88u,
+	      "match the captured native terminal reply with Response Info 1");
 	t3_csbk_t normal = ahoy(T3_SK_REGISTRATION, false, OWN, T3_ID_TSI);
 	rx(&ms, 1, &normal);
 	frames(&ms, 1);

@@ -508,6 +508,9 @@ The availability check for data to the radio (C_AHOY, Service_Kind 0010b) is ans
 with no such call it is the check, for the network's data to the radio (a reply to its datagram, sent once it is back
 on the TSCC).
 
+A Hytera dedicated packet-data terminal check (FID `0x68`, source `0xFFFD01`) gets C_ACKU Message_Accepted
+with Response Info 1 and the reserved bit clear, matching the native terminal reply captured on the site.
+
 **To an IP gateway (multi-part, 6.6.3.2.3).** `t3_ms_pdata_ip` asks for packet data to an IPv4 address outside the
 radio network: the C_RAND targets IPI (0xFFFEC3) with the Proxy Flag 0 (IPv4).
 

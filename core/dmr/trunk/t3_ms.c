@@ -1920,10 +1920,8 @@ static void on_tscc(t3_ms_t *ms, uint32_t now, uint8_t slot, uint8_t cc, const t
 		if (p->fid == T3_FID_HYTERA_DT_CHECK) {
 			if (ms->state == T3_CAMPED && is_me(ms, p->u.ahoy.dst) && !ms->stunned && may_send(ms)) {
 				ps_wake(ms, now);
-				answer(ms, slot, false, T3_RC_MS_ACCEPTED, p->u.ahoy.src, false);
-				// Hytera's packet-data handler requires the reserved bit after Reason Code.
-				ms->tx.burst[3] |= 1u;
-				t3_crc_append(ms->tx.burst, T3_CRC_MASK_CSBK);
+				// The native terminal reply carries Response Info 1 with the reserved bit clear.
+				answer_info(ms, slot, false, T3_RC_MS_ACCEPTED, 1u, p->u.ahoy.src, false);
 			}
 			return;
 		}
