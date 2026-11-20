@@ -3153,6 +3153,14 @@ static void test_hytera_data_terminal_check(void)
 	frames(&ms, 1);
 	CHECK(nsent == 2 && sent_act[1].burst[3] == 0x88u, "leave the reserved bit clear on a standard reply");
 	nsent = 0;
+	frames(&ms, 3);
+	CHECK(nsent == 0, "allow the terminal reply to go out before requesting the download");
+	t3_ms_rx(&ms, T, 1, T3_DT_CSBK, CC, check);
+	frames(&ms, 1);
+	CHECK(nsent == 1 && sent[0].op == T3_OP_C_ACKU, "answer a repeat of the terminal check");
+	nsent = 0;
+	frames(&ms, 5);
+	CHECK(nsent == 0, "wait for the repeated terminal reply before requesting the download");
 	CHECK(sent_rand(&ms) && sent[0].u.rand.dst == T3_HYTERA_DT_CHECK_ID &&
 	      sent[0].u.rand.kind == T3_SK_IND_DATA && sent[0].u.rand.options == 0,
 	      "request the dedicated downlink after the terminal acceptance");

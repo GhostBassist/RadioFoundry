@@ -510,7 +510,8 @@ on the TSCC).
 
 A Hytera dedicated packet-data terminal check (FID `0x68`, source `0xFFFD01`) gets C_ACKU Message_Accepted
 with Response Info 1 and the reserved bit clear, matching the native terminal reply captured on the site.
-After that reply, the radio requests individual packet data from the dedicated downlink gateway.
+After queueing that reply, the radio waits five TDMA frames before requesting individual packet data from the
+dedicated downlink gateway. A repeated terminal check gets another reply and restarts the wait if access is pending.
 A grant addressed to the radio from that gateway completes the request and is followed as a receive call.
 A System Busy response from the gateway is retried after two and then four seconds within the same access deadline.
 These retries have their own budget separate from the random access attempts that preceded the busy response.

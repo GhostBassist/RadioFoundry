@@ -23,6 +23,7 @@ static uint32_t or_default(uint16_t v, uint32_t def)
 
 // An MBC continuation follows its header on the same slot one TDMA frame later; allow one lost frame
 #define MBC_GAP_MS	130
+#define HYTERA_TERMINAL_REPLY_FRAMES	5u
 
 const char *t3_state_name(t3_state_t s)
 {
@@ -2499,9 +2500,15 @@ void t3_ms_slot(t3_ms_t *ms, uint32_t now, uint8_t slot, bool at_known, bool at_
 			return_to_tscc(ms, now);
 		} else if (ms->tx.request_pddi) {
 			ms->tx.request_pddi = false;
-			// The gateway schedules the pending download on a separate C_RAND after the ACK.
+			// The gateway schedules the download only after the terminal reply. Leave time for
+			// the ACK on air, including a reply to a repeat of the terminal check.
 			if (t3_ms_pdata(ms, now, T3_HYTERA_DT_CHECK_ID, false)) {
 				ms->ax.supl = false;
+			}
+			if (ms->ax.state == T3_AX_WAIT_SLOT && ms->ax.svc == T3_SVC_PDATA &&
+			    ms->ax.dst == T3_HYTERA_DT_CHECK_ID && ms->ax.tries == 0 &&
+			    ms->ax.frames < HYTERA_TERMINAL_REPLY_FRAMES) {
+				ms->ax.frames = HYTERA_TERMINAL_REPLY_FRAMES;
 			}
 		}
 		return;
