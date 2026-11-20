@@ -3,6 +3,7 @@
 
 #include "m17/m17_frame.h"
 #include "m17/m17_packet.h"
+#include "m17/m17_rx.h"
 
 #include <assert.h>
 #include <string.h>
@@ -95,8 +96,50 @@ static void packet_burst(void)
 	assert(m17_packet_burst_next(&burst, frame) == 0);
 }
 
+static void received(const uint8_t *link, const uint8_t *data, size_t len, void *ctx)
+{
+	assert(link[0] == 42 && len == 24);
+	for (size_t i = 0; i < len; i++)
+		assert(data[i] == i);
+	++*(unsigned *)ctx;
+}
+
+static void receive_burst(bool gap)
+{
+	uint8_t data[24];
+	for (unsigned i = 0; i < sizeof(data); i++)
+		data[i] = (uint8_t)i;
+	const uint8_t link[M17_LINK_DATA_BYTES] = { 42 };
+	m17_packet_burst_t burst;
+	assert(m17_packet_burst_begin(&burst, link, data, sizeof(data)) == 0);
+	uint8_t wire[5 * M17_FRAME_BYTES];
+	for (unsigned i = 0; i < 5; i++)
+		assert(m17_packet_burst_next(&burst, wire + i * M17_FRAME_BYTES) == 1);
+	// Damage one sync symbol. The framer can still identify the packet sync.
+	wire[2 * M17_FRAME_BYTES] ^= 0x40;
+	m17_rx_t rx;
+	unsigned deliveries = 0;
+	m17_rx_init(&rx, received, &deliveries);
+	for (unsigned offset = 0; offset < sizeof(wire); offset += 23) {
+		unsigned bytes = sizeof(wire) - offset;
+		if (bytes > 23)
+			bytes = 23;
+		const air_chunk_t chunk = {
+			.t_us = offset * 4u * 1000000u / 4800u,
+			.nsyms = (uint16_t)(bytes * 4u),
+			.sync_at = -1,
+			.flags = gap && offset == 115 ? AIR_CHUNK_GAP : 0,
+			.hard = wire + offset,
+		};
+		m17_rx_feed(&rx, &chunk);
+	}
+	assert(deliveries == (gap ? 0u : 1u));
+}
+
 int main(void)
 {
+	receive_burst(false);
+	receive_burst(true);
 	packet_burst();
 	packet_round_trip(1);
 	packet_round_trip(23);
